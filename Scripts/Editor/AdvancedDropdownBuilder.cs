@@ -111,11 +111,12 @@ public sealed class AdvancedDropdownBuilder
                 {
                     parent.Children.Add(new DropdownNode
                     {
-                        Label   = seg,
-                        Icon    = _values[i].Icon,
-                        Tooltip = _values[i].Tooltip,
-                        Index   = i,
-                        Parent  = parent,
+                        Label    = seg,
+                        FullPath = _values[i].Path,
+                        Icon     = _values[i].Icon,
+                        Tooltip  = _values[i].Tooltip,
+                        Index    = i,
+                        Parent   = parent,
                     });
                 }
                 else
@@ -160,6 +161,7 @@ public sealed class BuiltDropdown
 internal sealed class DropdownNode
 {
     public string             Label;
+    public string             FullPath;   // full slash-separated path from root, used for search
     public Texture2D          Icon;
     public string             Tooltip;
     public int                Index    = -1;   // -1 = folder
@@ -417,7 +419,10 @@ internal sealed class DropdownWindow : EditorWindow
 	    var label   = row.Q<Label>("label");
 	    var arrow   = row.Q<Label>("arrow");
 
-	    label.text  = node.Label;
+	    // In search mode show the full path so the user knows where the node lives.
+	    label.text  = !string.IsNullOrWhiteSpace(_search) && node.FullPath != null
+	        ? node.FullPath
+	        : node.Label;
 	    row.tooltip = node.Tooltip ?? string.Empty;
 
 	    if (iconImg != null)
@@ -475,8 +480,12 @@ internal sealed class DropdownWindow : EditorWindow
         }
         else
         {
-            // Search mode: flatten all leaves from the whole tree
-            CollectMatchingLeaves(_root, _search.ToLowerInvariant(), _display);
+            var query  = _search.ToLowerInvariant();
+            var scored = new List<(DropdownNode node, int score)>();
+            CollectScoredLeaves(_root, query, scored);
+            scored.Sort((a, b) => b.score.CompareTo(a.score));
+            foreach (var (node, _) in scored)
+                _display.Add(node);
         }
 
         _listView.itemsSource = _display;
@@ -484,26 +493,60 @@ internal sealed class DropdownWindow : EditorWindow
         _listView.ClearSelection();
 
         if (_display.Count > 0)
-        {
-	        _listView.selectedIndex = 0;
-        }
-        
+            _listView.selectedIndex = 0;
     }
 
-    private static void CollectMatchingLeaves(DropdownNode node, string query, List<DropdownNode> results)
+    private static void CollectScoredLeaves(DropdownNode node, string query, List<(DropdownNode, int)> results)
     {
         foreach (var child in node.Children)
         {
             if (child.IsLeaf)
             {
-                if (child.Label.ToLowerInvariant().Contains(query))
-                    results.Add(child);
+                var score = FuzzyScore(child.FullPath ?? child.Label, query);
+                if (score > 0) results.Add((child, score));
             }
             else
             {
-                CollectMatchingLeaves(child, query, results);
+                CollectScoredLeaves(child, query, results);
             }
         }
+    }
+
+    // Scores a full path against a query string.
+    // Returns 0 for no match. Higher = better match.
+    // Bonuses: exact substring > consecutive run > word-start > in-order subsequence.
+    private static int FuzzyScore(string text, string query)
+    {
+        var lText  = text.ToLowerInvariant();
+
+        // Exact substring anywhere in the full path: strong base score, shorter path wins ties.
+        if (lText.Contains(query))
+            return 10000 - text.Length;
+
+        // Subsequence match with progressive bonuses.
+        int score       = 0;
+        int textIdx     = 0;
+        int consecutive = 0;
+
+        foreach (var qc in query)
+        {
+            bool matched = false;
+            for (var i = textIdx; i < lText.Length; i++)
+            {
+                if (lText[i] != qc) { consecutive = 0; continue; }
+
+                bool wordStart = i == 0 || lText[i - 1] == '/' || lText[i - 1] == ' ' || lText[i - 1] == '_';
+                score += 1 + consecutive + (wordStart ? 8 : 0);
+                consecutive++;
+                textIdx = i + 1;
+                matched = true;
+                break;
+            }
+
+            if (!matched) return 0;
+        }
+
+        return score;
     }
 
     private void UpdateHeader()
