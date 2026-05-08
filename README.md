@@ -157,6 +157,3 @@ public InterfaceReference<IInputHandler> input;
 - All attributes work in arrays and lists
 - Missing references are auto-cleaned on save
 
-## License
-
-See LICENSE for details.
