@@ -407,6 +407,8 @@ namespace TypeSelector
 
                             if (!constructed.IsAbstract && !constructed.IsGenericTypeDefinition &&
                                 !unityObjectType.IsAssignableFrom(constructed) &&
+                                !SelectorVisibility.IsHidden(candidate) &&
+                                !SelectorVisibility.IsHidden(constructed) &&
                                 targetType.IsAssignableFrom(constructed))
                                 list.Add(constructed);
                         }
@@ -418,17 +420,20 @@ namespace TypeSelector
                 candidates.AddRange(cached);
 
                 if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
-                    !unityObjectType.IsAssignableFrom(targetType))
+                    !unityObjectType.IsAssignableFrom(targetType) &&
+                    !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
             }
             else
             {
                 foreach (var t in TypeCache.GetTypesDerivedFrom(targetType))
                 {
-                    if (!t.IsAbstract && !t.IsGenericTypeDefinition && !unityObjectType.IsAssignableFrom(t))
+                    if (!t.IsAbstract && !t.IsGenericTypeDefinition && !unityObjectType.IsAssignableFrom(t) &&
+                        !SelectorVisibility.IsHidden(t))
                         candidates.Add(t);
                 }
-                if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition)
+                if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
+                    !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
             }
 

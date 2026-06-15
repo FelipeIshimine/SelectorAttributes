@@ -38,6 +38,28 @@ public class MultiplyModifier : ModifierBase { }
 
 Without this, class name is shown (namespace stripped automatically).
 
+### `[HideInSelector]` — Hide a Class from the Dropdown
+
+Excludes a class from `[TypeSelector]` dropdowns without making it an invalid `[SerializeReference]`
+value. The type can still be assigned from code or loaded from an existing save — it is just not
+offered as a choice in the picker.
+
+```csharp
+[HideInSelector]
+public class LegacyModifier : ModifierBase { }
+```
+
+Pass `hideDerived: true` to also hide everything that derives from the type:
+
+```csharp
+[HideInSelector(hideDerived: true)]
+public abstract class EditorOnlyEffectBase : EffectBase { }
+```
+
+Use it for intermediate base classes, deprecated implementations kept for save compatibility, or
+editor-only / test scaffolding you don't want designers to pick. Your own tooling can query the same
+rule via `SelectorVisibility.IsHidden(type)`.
+
 ### `[AssetSelector]` — Project Asset Search
 
 Browse and select project assets with optional path filtering and grouping.
@@ -152,7 +174,7 @@ public InterfaceReference<IInputHandler> input;
 
 ## Notes
 
-- `[TypeSelector]` requires `[SerializeReference]`; automatic filtering excludes abstracts and Unity Objects
+- `[TypeSelector]` requires `[SerializeReference]`; automatic filtering excludes abstracts, Unity Objects, and `[HideInSelector]` types
 - `[AssetSelector]` searches by type; optional folder constraints
 - All attributes work in arrays and lists
 - Missing references are auto-cleaned on save
