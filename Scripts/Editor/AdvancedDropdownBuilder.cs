@@ -34,10 +34,35 @@ public sealed class AdvancedDropdownBuilder
     private readonly List<AdvancedDropdownPath> _values = new();
     private Action<int>                         _callback;
     private char                                _splitChar = '/';
+    private Action<string>                      _onCreate;
+    private string                              _createLabelFormat = "＋ Create \"{0}\"";
+    private Action<int>                         _onItemContext;
 
     public AdvancedDropdownBuilder WithTitle(string title)      { _title     = title; return this; }
     public AdvancedDropdownBuilder SetSplitCharacter(char c)    { _splitChar = c;     return this; }
     public AdvancedDropdownBuilder SetCallback(Action<int> cb)  { _callback  = cb;    return this; }
+
+    /// <summary>
+    /// Adds a synthetic "create" row shown while searching whenever no leaf exactly matches the typed
+    /// text. Selecting it invokes <paramref name="onCreate"/> with the current (trimmed) search text.
+    /// <paramref name="labelFormat"/> may contain <c>{0}</c> for that text.
+    /// </summary>
+    public AdvancedDropdownBuilder SetCreateOption(Action<string> onCreate, string labelFormat = null)
+    {
+        _onCreate = onCreate;
+        if (labelFormat != null) _createLabelFormat = labelFormat;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables a right-click context menu on leaf rows. The handler receives the leaf's element index
+    /// (the same index passed to <see cref="SetCallback"/>) and is responsible for showing its own menu.
+    /// </summary>
+    public AdvancedDropdownBuilder SetItemContextHandler(Action<int> onContext)
+    {
+        _onItemContext = onContext;
+        return this;
+    }
 
     public AdvancedDropdownBuilder AddElements(IEnumerable<string> elements, out List<int> indices)
     {
@@ -132,7 +157,12 @@ public sealed class AdvancedDropdownBuilder
             }
         }
 
-        return new BuiltDropdown(root, _title ?? string.Empty, _callback);
+        return new BuiltDropdown(root, _title ?? string.Empty, _callback)
+        {
+            OnCreate          = _onCreate,
+            CreateLabelFormat = _createLabelFormat,
+            OnItemContext     = _onItemContext,
+        };
     }
 }
 
@@ -143,6 +173,10 @@ public sealed class BuiltDropdown
     internal readonly DropdownNode Root;
     internal readonly string       Title;
     internal readonly Action<int>  Callback;
+
+    internal Action<string> OnCreate;
+    internal string         CreateLabelFormat = "＋ Create \"{0}\"";
+    internal Action<int>    OnItemContext;
 
     internal BuiltDropdown(DropdownNode root, string title, Action<int> callback)
     {
@@ -167,9 +201,10 @@ internal sealed class DropdownNode
     public int                Index    = -1;   // -1 = folder
     public List<DropdownNode> Children = new();
     public DropdownNode       Parent;
+    public bool               IsCreate;        // synthetic "create new" row (not a real entry)
 
     public bool IsLeaf   => Index >= 0;
-    public bool IsFolder => !IsLeaf;
+    public bool IsFolder => !IsLeaf && !IsCreate;
 }
 
 // ── Popup window ──────────────────────────────────────────────────────────────
@@ -194,6 +229,9 @@ internal sealed class DropdownWindow : EditorWindow
         win._current  = data.Root;
         win._title    = data.Title;
         win._callback = data.Callback;
+        win._onCreate          = data.OnCreate;
+        win._createLabelFormat = data.CreateLabelFormat;
+        win._onItemContext     = data.OnItemContext;
         win.ShowAsDropDown(screenRect, new Vector2(Mathf.Max(screenRect.width, 260), 340));
     }
 
@@ -205,6 +243,9 @@ internal sealed class DropdownWindow : EditorWindow
     private Action<int>        _callback;
     private string             _search  = "";
     private List<DropdownNode> _display = new();
+    private Action<string>     _onCreate;
+    private string             _createLabelFormat = "＋ Create \"{0}\"";
+    private Action<int>        _onItemContext;
 
     // ── UI refs ───────────────────────────────────────────────────────────────
 
@@ -399,9 +440,16 @@ internal sealed class DropdownWindow : EditorWindow
 
         row.RegisterCallback<PointerDownEvent>(e =>
         {
-            if (e.button != 0) return;
-            if (row.userData is int idx && idx >= 0 && idx < _display.Count)
-                OnItemClicked(_display[idx]);
+            if (!(row.userData is int idx) || idx < 0 || idx >= _display.Count) return;
+            var node = _display[idx];
+
+            if (e.button == 1)   // right-click → leaf context menu (if enabled)
+            {
+                if (node.IsLeaf && _onItemContext != null) { _onItemContext(node.Index); e.StopPropagation(); }
+                return;
+            }
+
+            if (e.button == 0) OnItemClicked(node);
         });
 
         row.Add(iconImg);
@@ -445,6 +493,15 @@ internal sealed class DropdownWindow : EditorWindow
 
     private void OnItemClicked(DropdownNode node)
     {
+        if (node.IsCreate)
+        {
+            var text = _search.Trim();
+            var onCreate = _onCreate;
+            Close();
+            onCreate?.Invoke(text);
+            return;
+        }
+
         if (node.IsFolder)
         {
             _current = node;
@@ -486,6 +543,15 @@ internal sealed class DropdownWindow : EditorWindow
             scored.Sort((a, b) => b.score.CompareTo(a.score));
             foreach (var (node, _) in scored)
                 _display.Add(node);
+
+            // Offer "create new" unless a leaf already matches the typed name exactly.
+            if (_onCreate != null)
+            {
+                var typed = _search.Trim();
+                bool hasExact = _display.Any(n => n.IsLeaf && string.Equals(n.Label, typed, StringComparison.OrdinalIgnoreCase));
+                if (typed.Length > 0 && !hasExact)
+                    _display.Add(new DropdownNode { Label = string.Format(_createLabelFormat, typed), IsCreate = true });
+            }
         }
 
         _listView.itemsSource = _display;
