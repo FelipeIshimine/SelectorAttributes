@@ -152,6 +152,14 @@ namespace TypeSelector
                 activeTypeName.AddToClassList("show");
 
             typeSelectorBtn.clicked += () => SelectorButtonClicked_ForProperty(typeSelectorBtn, property,declaredType);
+
+            AddContextMenu(typeSelectorBtn, () => property.managedReferenceValue?.GetType(), declaredType, () =>
+            {
+                property.managedReferenceValue = null;
+                property.serializedObject.ApplyModifiedProperties();
+                typeSelectorBtn.parent?.Bind(property.serializedObject);
+            });
+
             typeSelectorBtn.RemoveFromHierarchy();
             container.Add(typeSelectorBtn);
 
@@ -291,6 +299,13 @@ namespace TypeSelector
                 var typeBtn = StyledButton(GetButtonLabel(elementProp), AccentBlueDark, AccentBlue, 130f);
                 typeBtn.style.marginLeft = 6;
                 typeBtn.clicked += () => SelectorButtonClicked_ForElement(typeBtn, elementProp, collectionProperty, fieldInfo);
+                AddContextMenu(typeBtn, () => elementProp.managedReferenceValue?.GetType(), GetElementTargetType(fieldInfo), () =>
+                {
+                    elementProp.managedReferenceValue = null;
+                    collectionProperty.serializedObject.ApplyModifiedProperties();
+                    typeBtn.parent?.Bind(collectionProperty.serializedObject);
+                    typeBtn.text = GetButtonLabel(elementProp);
+                });
                 row.Add(typeBtn);
 
                 var sep = new VisualElement();
@@ -455,6 +470,63 @@ namespace TypeSelector
                 .SetCallback(i => onSelect?.Invoke(resolvedTypes[i]))
                 .Build()
                 .Show(worldRect);
+        }
+
+        // ── Context menu ──────────────────────────────────────────────────────────
+
+        private static void AddContextMenu(Button button, Func<Type> getCurrentType, Type declaredType, Action clearAction)
+        {
+            button.AddManipulator(new ContextualMenuManipulator(evt =>
+            {
+                var currentType = getCurrentType();
+
+                if (currentType != null)
+                {
+                    var script = FindScript(currentType);
+                    evt.menu.AppendAction("Open Class",
+                        _ => AssetDatabase.OpenAsset(script),
+                        script != null ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+                    evt.menu.AppendAction("Ping Class",
+                        _ => EditorGUIUtility.PingObject(script),
+                        script != null ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+                }
+
+                var baseType = currentType?.BaseType ?? declaredType;
+                if (baseType != null && baseType != typeof(object))
+                {
+                    var baseScript = FindScript(baseType);
+                    evt.menu.AppendAction($"Open Base Class ({baseType.Name})",
+                        _ => AssetDatabase.OpenAsset(baseScript),
+                        baseScript != null ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+                }
+
+                evt.menu.AppendSeparator();
+                evt.menu.AppendAction("Clear", _ => clearAction(),
+                    currentType != null ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+            }));
+        }
+
+        private static readonly Dictionary<Type, MonoScript> ScriptCache = new();
+
+        private static MonoScript FindScript(Type type)
+        {
+            if (type == null) return null;
+            if (ScriptCache.TryGetValue(type, out var cached)) return cached;
+
+            MonoScript found = null;
+            foreach (var guid in AssetDatabase.FindAssets($"t:MonoScript {type.Name}"))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var script = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
+                if (script != null && script.GetClass() == type)
+                {
+                    found = script;
+                    break;
+                }
+            }
+
+            ScriptCache[type] = found;
+            return found;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────
