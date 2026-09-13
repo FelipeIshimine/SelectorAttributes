@@ -135,9 +135,7 @@ public class AssetSelectorDrawer : PropertyDrawer
             if (cacheIndex < entry.Assets.Count)
             {
                 // Existing asset selected.
-                var item      = entry.Assets[cacheIndex];
-                var asset     = AssetDatabase.LoadAssetAtPath<Object>(item.Path);
-                property.objectReferenceValue = asset;
+                property.objectReferenceValue = entry.Assets[cacheIndex].Asset;
             }
             else
             {
@@ -173,16 +171,34 @@ public class AssetSelectorDrawer : PropertyDrawer
         var guids = AssetDatabase.FindAssets($"t:{fieldType.Name}", folders?.Length > 0 ? folders : null);
         foreach (var guid in guids)
         {
-            var path  = AssetDatabase.GUIDToAssetPath(guid);
-            var asset = AssetDatabase.LoadAssetAtPath(path, fieldType);
-            if (asset == null) continue;
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var main = AssetDatabase.LoadMainAssetAtPath(path);
+            var subAssets = AssetDatabase.LoadAllAssetRepresentationsAtPath(path)
+                .Where(fieldType.IsInstanceOfType)
+                .OrderBy(sub => sub.name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-            var foundType = asset.GetType();
-            typesFound.Add(foundType);
-            assets.Add(new Item(path, GetCachedIcon(path), foundType));
+            if (fieldType.IsInstanceOfType(main))
+            {
+                typesFound.Add(main.GetType());
+                assets.Add(new Item(path, subAssets.Count > 0 ? ThisLabel : null, main, GetCachedIcon(path)));
+            }
+
+            foreach (var sub in subAssets)
+            {
+                typesFound.Add(sub.GetType());
+                assets.Add(new Item(path, sub.name, sub, AssetPreview.GetMiniThumbnail(sub)));
+            }
         }
 
-        assets.Sort((x, y) => string.Compare(x.Path, y.Path, StringComparison.Ordinal));
+        assets.Sort((x, y) =>
+        {
+            int byPath = string.Compare(x.Path, y.Path, StringComparison.Ordinal);
+            if (byPath != 0) return byPath;
+            if (x.SubLabel == ThisLabel) return -1;
+            if (y.SubLabel == ThisLabel) return 1;
+            return string.Compare(x.SubLabel, y.SubLabel, StringComparison.OrdinalIgnoreCase);
+        });
 
         var entry = new CacheEntry(assets, typesFound);
         s_cache[BuildCacheKey(fieldType, folders)] = entry;
@@ -220,13 +236,15 @@ public class AssetSelectorDrawer : PropertyDrawer
             // For modes that hide the path in the label, surface it as a tooltip instead.
             string tooltip = group == AssetSelectorAttribute.GroupMode.ByPath ? null : item.Path;
 
+            string suffix = item.SubLabel == null ? string.Empty : $"/{item.SubLabel}";
+
             yield return group switch
             {
-                AssetSelectorAttribute.GroupMode.ByPath => new AdvancedDropdownPath(item.Path, item.Icon),
+                AssetSelectorAttribute.GroupMode.ByPath => new AdvancedDropdownPath(item.Path + suffix, item.Icon),
                 AssetSelectorAttribute.GroupMode.ByType when typesFound.Count > 1 =>
                     new AdvancedDropdownPath(
-                        $"{SelectorName.GetDisplayName(item.Type)}/{Path.GetFileName(item.Path)}", item.Icon, tooltip),
-                _ => new AdvancedDropdownPath(Path.GetFileName(item.Path), item.Icon, tooltip),
+                        $"{SelectorName.GetDisplayName(item.Asset.GetType())}/{Path.GetFileName(item.Path)}{suffix}", item.Icon, tooltip),
+                _ => new AdvancedDropdownPath(Path.GetFileName(item.Path) + suffix, item.Icon, tooltip),
             };
         }
 
@@ -255,6 +273,8 @@ public class AssetSelectorDrawer : PropertyDrawer
         if (t == typeof(Object) || t == typeof(object)) return typeof(Object);
         return t.IsSubclassOf(typeof(Object)) ? t : typeof(Object);
     }
+
+    private const string ThisLabel = "this";
 
     private static string BuildCacheKey(Type fieldType, string[] folders) =>
         $"{fieldType.FullName}|{(folders?.Length > 0 ? string.Join(";", folders) : "<all>")}";
@@ -314,16 +334,18 @@ public class AssetSelectorDrawer : PropertyDrawer
 
 // ── Shared item struct ────────────────────────────────────────────────────────
 
-internal struct Item
+internal readonly struct Item
 {
-    public readonly Texture2D Icon;
-    public readonly Type      Type;
     public readonly string    Path;
+    public readonly string    SubLabel;
+    public readonly Object    Asset;
+    public readonly Texture2D Icon;
 
-    public Item(string path, Texture2D icon, Type type)
+    public Item(string path, string subLabel, Object asset, Texture2D icon)
     {
-        Path = path;
-        Icon = icon;
-        Type = type;
+        Path     = path;
+        SubLabel = subLabel;
+        Asset    = asset;
+        Icon     = icon;
     }
 }
