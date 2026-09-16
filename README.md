@@ -240,7 +240,8 @@ at once without navigating away.
 #### CascadingFlyouts
 
 Hovering a folder opens its submenu as a floating panel to the side, chaining down the path like a
-native context menu — fast for sweeping the mouse down a known path. Browse-only (no search field).
+native context menu — fast for sweeping the mouse down a known path. The root panel also has a search
+box that filters to a flattened results list in place; clearing it restores the chain.
 
 ![CascadingFlyouts](Documentation~/images/cascading-flyouts.png)
 
@@ -252,7 +253,8 @@ Consistent across all modes, with two focus zones:
   `←`/`→` edit the search text; `Enter` activates the selection; typing filters.
 - **In the list:** `↑`/`↓` move; `→`/`Enter` descend into a folder (`Enter` also selects a leaf);
   `←`/`Backspace` go back; any printable key jumps back to the search field and filters.
-- `Esc` closes. CascadingFlyouts is browse-only (no search field).
+- `Esc` closes. In CascadingFlyouts the search box lives on the root panel; child panels are
+  browse-only.
 
 Try all four live via **Tools → SelectorAttributes → Dropdown Render Mode Tester**.
 
