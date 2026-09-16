@@ -251,8 +251,9 @@ Consistent across all modes, with two focus zones:
 
 - **In the search field:** `↓` moves into the list (past the preselected first row); `↑` is ignored;
   `←`/`→` edit the search text; `Enter` activates the selection; typing filters.
-- **In the list:** `↑`/`↓` move; `→`/`Enter` descend into a folder (`Enter` also selects a leaf);
-  `←`/`Backspace` go back; any printable key jumps back to the search field and filters.
+- **In the list:** `↑`/`↓` move; `Home`/`End` jump to the first/last item; `→`/`Enter` descend into a
+  folder (`Enter` also selects a leaf); `←`/`Backspace` go back; any printable key jumps back to the
+  search field and filters.
 - `Esc` closes. In CascadingFlyouts the search box lives on the root panel; child panels are
   browse-only.
 

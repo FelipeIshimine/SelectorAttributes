@@ -607,6 +607,16 @@ internal sealed class DropdownWindow : EditorWindow
                 return;
             }
 
+            case KeyCode.Home:
+                if (_display.Count > 0) { _listView.selectedIndex = 0; _listView.ScrollToItem(0); }
+                e.StopPropagation();
+                return;
+
+            case KeyCode.End:
+                if (_display.Count > 0) { int last = _display.Count - 1; _listView.selectedIndex = last; _listView.ScrollToItem(last); }
+                e.StopPropagation();
+                return;
+
             case KeyCode.Return:
             case KeyCode.KeypadEnter:
             {

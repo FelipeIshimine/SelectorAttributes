@@ -471,6 +471,14 @@ internal sealed class FlyoutWindow : EditorWindow
                     e.StopPropagation();
                     return;
                 }
+                case KeyCode.Home:
+                    if (_searchResults.Count > 0) { _resultsList.selectedIndex = 0; _resultsList.ScrollToItem(0); }
+                    e.StopPropagation();
+                    return;
+                case KeyCode.End:
+                    if (_searchResults.Count > 0) { int last = _searchResults.Count - 1; _resultsList.selectedIndex = last; _resultsList.ScrollToItem(last); }
+                    e.StopPropagation();
+                    return;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
                 {
@@ -494,6 +502,16 @@ internal sealed class FlyoutWindow : EditorWindow
 
             case KeyCode.UpArrow:
                 if (_nodes.Count > 0) SetSelected(_selected - 1);
+                e.StopPropagation();
+                return;
+
+            case KeyCode.Home:
+                if (_nodes.Count > 0) SetSelected(0);
+                e.StopPropagation();
+                return;
+
+            case KeyCode.End:
+                if (_nodes.Count > 0) SetSelected(_nodes.Count - 1);
                 e.StopPropagation();
                 return;
 

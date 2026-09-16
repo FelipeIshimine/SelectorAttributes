@@ -382,6 +382,16 @@ internal sealed class AccordionWindow : EditorWindow
                 return;
             }
 
+            case KeyCode.Home:
+                if (_visible.Count > 0) { _listView.selectedIndex = 0; _listView.ScrollToItem(0); }
+                e.StopPropagation();
+                return;
+
+            case KeyCode.End:
+                if (_visible.Count > 0) { int last = _visible.Count - 1; _listView.selectedIndex = last; _listView.ScrollToItem(last); }
+                e.StopPropagation();
+                return;
+
             case KeyCode.RightArrow:
             {
                 var node = SelectedNode();

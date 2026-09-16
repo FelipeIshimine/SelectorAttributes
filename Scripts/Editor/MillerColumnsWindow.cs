@@ -395,6 +395,8 @@ internal sealed class MillerColumnsWindow : EditorWindow
             {
                 case KeyCode.UpArrow:
                 case KeyCode.DownArrow:
+                case KeyCode.Home:
+                case KeyCode.End:
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
                     HandleListKey(e, _searchList, _searchResults, n => OnItemClicked(n, -1));
@@ -426,6 +428,8 @@ internal sealed class MillerColumnsWindow : EditorWindow
 
             case KeyCode.UpArrow:
             case KeyCode.DownArrow:
+            case KeyCode.Home:
+            case KeyCode.End:
             case KeyCode.Return:
             case KeyCode.KeypadEnter:
             {
@@ -483,6 +487,14 @@ internal sealed class MillerColumnsWindow : EditorWindow
                 e.StopPropagation();
                 return;
             }
+            case KeyCode.Home:
+                if (items.Count > 0) { list.selectedIndex = 0; list.ScrollToItem(0); }
+                e.StopPropagation();
+                return;
+            case KeyCode.End:
+                if (items.Count > 0) { int last = items.Count - 1; list.selectedIndex = last; list.ScrollToItem(last); }
+                e.StopPropagation();
+                return;
             case KeyCode.Return:
             case KeyCode.KeypadEnter:
             {
