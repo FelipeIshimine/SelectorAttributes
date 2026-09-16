@@ -7,11 +7,13 @@ public class TypeSelectorAttribute : PropertyAttribute
 	public string Label { get; }
 	public readonly DrawMode Mode;
 	public readonly bool ShowBaseType;
-	public TypeSelectorAttribute(DrawMode mode = DrawMode.Default, string label = null, bool showBaseType = false)
+	public readonly DropdownRenderMode RenderMode;
+	public TypeSelectorAttribute(DrawMode mode = DrawMode.Default, string label = null, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
 	{
 		Label = label;
 		this.Mode = mode;
 		ShowBaseType = showBaseType;
+		RenderMode = renderMode;
 	}
 }
 

@@ -3,14 +3,6 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-public enum DropdownRenderMode
-{
-    SearchDrilldown,
-    MillerColumns,
-    Accordion,
-    CascadingFlyouts,
-}
-
 internal interface IDropdownRenderer
 {
     void Show(Rect screenRect, BuiltDropdown data);

@@ -47,7 +47,7 @@ namespace TypeSelector
 	        {
 		        return BuildCollection(property, fieldInfo);
 	        }*/
-	        return Build(property, fieldInfo.FieldType,attribute.Mode,attribute.Label,attribute.ShowBaseType);
+	        return Build(property, fieldInfo.FieldType,attribute.Mode,attribute.Label,attribute.ShowBaseType,attribute.RenderMode);
         }
 
 
@@ -62,7 +62,7 @@ namespace TypeSelector
 		    return root;
         }
         
-        public static VisualElement Build(SerializedProperty property, Type declaredType, DrawMode drawMode, string label, bool showBaseType = false)
+        public static VisualElement Build(SerializedProperty property, Type declaredType, DrawMode drawMode, string label, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
         {
             if (SerializationUtility.HasManagedReferencesWithMissingTypes(property.serializedObject.targetObject))
                 SerializationUtility.ClearAllManagedReferencesWithMissingTypes(property.serializedObject.targetObject);
@@ -162,7 +162,7 @@ namespace TypeSelector
             else if (drawMode != DrawMode.Inline)
                 activeTypeName.AddToClassList("show");
 
-            typeSelectorBtn.clicked += () => SelectorButtonClicked_ForProperty(typeSelectorBtn, property,declaredType,showBaseType);
+            typeSelectorBtn.clicked += () => SelectorButtonClicked_ForProperty(typeSelectorBtn, property,declaredType,showBaseType,renderMode);
             AddContextMenu(typeSelectorBtn, () => property.managedReferenceValue?.GetType(), declaredType, () =>
             {
                 property.managedReferenceValue = null;
@@ -355,14 +355,14 @@ namespace TypeSelector
 
         // ── Click handlers ────────────────────────────────────────────────────────
 
-        private static void SelectorButtonClicked_ForProperty(Button typeBtn, SerializedProperty property, Type declaredType, bool showBaseType = false)
+        private static void SelectorButtonClicked_ForProperty(Button typeBtn, SerializedProperty property, Type declaredType, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
         {
 	        ShowTypeDropdown(typeBtn.worldBound, declaredType, chosenType =>
             {
                 property.managedReferenceValue = chosenType != null ? Activator.CreateInstance(chosenType) : null;
                 property.serializedObject.ApplyModifiedProperties();
                 typeBtn.parent?.Bind(property.serializedObject);
-            }, showBaseType);
+            }, showBaseType, renderMode);
         }
 
         private static void SelectorButtonClicked_ForElement(Button typeBtn, SerializedProperty elementProp, SerializedProperty collectionProp, FieldInfo fieldInfo, bool showBaseType = false)
@@ -399,7 +399,7 @@ namespace TypeSelector
         // ── Dropdown ──────────────────────────────────────────────────────────────
 
         
-        private static void ShowTypeDropdown(Rect worldRect, Type targetType, Action<Type> onSelect, bool showBaseType = false)
+        private static void ShowTypeDropdown(Rect worldRect, Type targetType, Action<Type> onSelect, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
         {
             if (targetType == null) { onSelect?.Invoke(null); return; }
 
@@ -476,6 +476,7 @@ namespace TypeSelector
 
             new AdvancedDropdownBuilder()
                 .WithTitle($"{targetType.Name} Types")
+                .WithRenderMode(renderMode)
                 .AddElements(pairs.Select(p => (p.path, p.right, p.type)), out var resolvedTypes)
                 .SetCallback(i => onSelect?.Invoke(resolvedTypes[i]))
                 .Build()

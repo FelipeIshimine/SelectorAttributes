@@ -198,18 +198,50 @@ enables right-click on leaves, `WithTitle(...)` sets the title text (shown only 
 
 ### Render modes
 
-The same tree can be shown four ways via `WithRenderMode(DropdownRenderMode.*)`:
+The same tree can be shown four ways via `WithRenderMode(DropdownRenderMode.*)`.
 
-| Mode | Best for |
-|---|---|
-| **SearchDrilldown** (default) | Large sets where you know the name — search box + drill in/out |
-| **MillerColumns** | Browsing a hierarchy, comparing siblings across columns |
-| **Accordion** | Scanning several branches at once, expanded in place |
-| **CascadingFlyouts** | Fast mouse traversal of a known path (browse-only, no search) |
+> **Where this applies:** `[TypeSelector]` and `[AssetSelector]` accept the render mode directly (see
+> below). `[ComponentSelector]`, `[SubAssetSelector]`, and `[ScriptableObjectKey]` use their own
+> dedicated windows rather than the shared `AdvancedDropdownBuilder`, so they always render in their
+> own style and don't take a mode. You can also pick a mode for any dropdown you build yourself via
+> `WithRenderMode(...)` or `Show(rect, mode)`.
+
+```csharp
+[SerializeReference, TypeSelector(renderMode: DropdownRenderMode.MillerColumns)]
+public AbilityBase ability;
+
+[AssetSelector(DropdownRenderMode.Accordion, GroupMode.ByType)]
+public ScriptableObject config;
+```
+
+#### SearchDrilldown (default)
+
+Search box filters the whole tree; click a folder to drill in one level, the back arrow (or `←`) to
+ascend. Best for large sets where you roughly know the name.
 
 ![SearchDrilldown](Documentation~/images/search-drilldown.png)
+
+#### MillerColumns
+
+Picking a folder opens its children as a new column to the right while ancestors stay visible, so you
+can compare siblings and see where you are. The search box flattens to a single results column. Best
+for browsing a hierarchy.
+
 ![MillerColumns](Documentation~/images/miller-columns.png)
+
+#### Accordion
+
+One vertical scroll of the tree; folders expand in place (▸/▾) with indentation. Searching
+auto-expands the branches that contain matches and dims the rest. Best for scanning several branches
+at once without navigating away.
+
 ![Accordion](Documentation~/images/accordion.png)
+
+#### CascadingFlyouts
+
+Hovering a folder opens its submenu as a floating panel to the side, chaining down the path like a
+native context menu — fast for sweeping the mouse down a known path. Browse-only (no search field).
+
 ![CascadingFlyouts](Documentation~/images/cascading-flyouts.png)
 
 ### Keyboard

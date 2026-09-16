@@ -29,7 +29,7 @@ public class AssetSelectorDrawer : PropertyDrawer
     public override VisualElement CreatePropertyGUI(SerializedProperty property)
     {
         var attr = attribute as AssetSelectorAttribute;
-        return CreateProperty(property, GetFieldType(), attr.Group, attr.Folders);
+        return CreateProperty(property, GetFieldType(), attr.Group, attr.RenderMode, attr.Folders);
     }
 
     // ── Public factory (also used by ScriptableObjectFallbackDrawer) ──────────
@@ -38,6 +38,7 @@ public class AssetSelectorDrawer : PropertyDrawer
         SerializedProperty property,
         Type fieldType,
         AssetSelectorAttribute.GroupMode group,
+        DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown,
         params string[] folders)
     {
         var container = new VisualElement
@@ -87,7 +88,7 @@ public class AssetSelectorDrawer : PropertyDrawer
             var so   = new SerializedObject(serializedObjectTarget);
             var prop = so.FindProperty(propertyPath);
             if (prop != null)
-                ShowDropdown(prop, dropButton, fieldType, group, folders);
+                ShowDropdown(prop, dropButton, fieldType, group, renderMode, folders);
         };
 
         container.Add(objectField);
@@ -102,6 +103,7 @@ public class AssetSelectorDrawer : PropertyDrawer
         VisualElement anchor,
         Type fieldType,
         AssetSelectorAttribute.GroupMode group,
+        DropdownRenderMode renderMode,
         string[] folders)
     {
         var key = BuildCacheKey(fieldType, folders);
@@ -115,7 +117,7 @@ public class AssetSelectorDrawer : PropertyDrawer
 
         // ── Dropdown paths ────────────────────────────────────────────────────
 
-        var dropdownBuilder = new AdvancedDropdownBuilder().WithTitle(fieldType.Name);
+        var dropdownBuilder = new AdvancedDropdownBuilder().WithTitle(fieldType.Name).WithRenderMode(renderMode);
         List<int> indices;
 
         var displayPaths = BuildDisplayPaths(entry.Assets, creationTypes, group, entry.TypesFound).ToList();
