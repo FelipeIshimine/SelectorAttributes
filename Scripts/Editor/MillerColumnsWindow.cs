@@ -4,7 +4,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using static DropdownTheme;
 
 internal sealed class MillerColumnsRenderer : IDropdownRenderer
 {
@@ -25,6 +24,7 @@ internal sealed class MillerColumnsWindow : EditorWindow
         win._onCreate          = data.OnCreate;
         win._createLabelFormat = data.CreateLabelFormat;
         win._onItemContext     = data.OnItemContext;
+        win._showTitle         = data.ShowTitleBar;
         win.ShowAsDropDown(screenRect, new Vector2(Mathf.Max(screenRect.width, ColumnWidth * 2 + 4), 360));
     }
 
@@ -42,6 +42,7 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private string             _search = "";
     private bool               _searchFocused = true;
     private bool               _refreshingSelection;
+    private bool               _showTitle;
     private readonly List<DropdownNode> _searchResults = new();
 
     private Label       _titleLabel;
@@ -58,11 +59,9 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private void CreateGUI()
     {
         var root = rootVisualElement;
-        root.style.flexDirection   = FlexDirection.Column;
-        root.style.flexGrow        = 1;
-        root.style.backgroundColor = C_BG;
+        DropdownTheme.ApplyPanel(root);
 
-        root.Add(BuildHeader());
+        if (_showTitle) root.Add(BuildHeader());
         root.Add(BuildSearchBar());
         root.Add(BuildColumnsHost());
         root.Add(BuildSearchList());
@@ -79,23 +78,10 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private VisualElement BuildHeader()
     {
         var header = new VisualElement();
-        header.style.flexDirection     = FlexDirection.Row;
-        header.style.alignItems        = Align.Center;
-        header.style.minHeight         = 30;
-        header.style.paddingLeft       = 8;
-        header.style.paddingRight      = 8;
-        header.style.paddingTop        = 4;
-        header.style.paddingBottom     = 4;
-        header.style.backgroundColor   = C_HEADER;
-        header.style.borderBottomWidth = 1;
-        header.style.borderBottomColor = C_BORDER;
+        header.AddToClassList("dropdown-header");
 
         _titleLabel = new Label(_title ?? string.Empty);
-        _titleLabel.style.flexGrow                = 1;
-        _titleLabel.style.fontSize                = 12;
-        _titleLabel.style.color                   = C_TEXT;
-        _titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-        _titleLabel.style.unityTextAlign          = TextAnchor.MiddleCenter;
+        _titleLabel.AddToClassList("dropdown-title");
 
         header.Add(_titleLabel);
         return header;
@@ -104,39 +90,16 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private VisualElement BuildSearchBar()
     {
         var bar = new VisualElement();
-        bar.style.paddingLeft       = 6; bar.style.paddingRight  = 6;
-        bar.style.paddingTop        = 5; bar.style.paddingBottom = 5;
-        bar.style.backgroundColor   = C_BG;
-        bar.style.borderBottomWidth = 1;
-        bar.style.borderBottomColor = C_BORDER;
+        bar.AddToClassList("dropdown-searchbar");
 
         _searchField = new TextField();
         _searchField.style.flexGrow = 1;
         _searchField.RegisterCallback<FocusInEvent>(_  => _searchFocused = true);
         _searchField.RegisterCallback<FocusOutEvent>(_ => _searchFocused = false);
 
-        _searchField.RegisterCallbackOnce<AttachToPanelEvent>(_ =>
-        {
-            var input = _searchField.Q(className: "unity-base-field__input");
-            if (input == null) return;
-            input.style.backgroundColor = new Color(0.13f, 0.13f, 0.13f);
-            input.style.color           = C_TEXT;
-            input.style.borderTopWidth  = input.style.borderRightWidth =
-                input.style.borderBottomWidth = input.style.borderLeftWidth = 1;
-            input.style.borderTopColor  = input.style.borderRightColor =
-                input.style.borderBottomColor = input.style.borderLeftColor = C_BORDER;
-            SetBorderRadius(input.style, 4);
-        });
-
         var placeholder = new Label("Search...");
-        placeholder.style.position       = Position.Absolute;
-        placeholder.style.left           = 10;
-        placeholder.style.top            = 0;
-        placeholder.style.bottom         = 0;
-        placeholder.style.fontSize       = 12;
-        placeholder.style.color          = C_SUBTEXT;
-        placeholder.style.unityTextAlign = TextAnchor.MiddleLeft;
-        placeholder.pickingMode          = PickingMode.Ignore;
+        placeholder.AddToClassList("dropdown-placeholder");
+        placeholder.pickingMode = PickingMode.Ignore;
 
         _searchField.RegisterValueChangedCallback(e =>
         {
@@ -154,6 +117,8 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private VisualElement BuildColumnsHost()
     {
         _columnsHost = new ScrollView(ScrollViewMode.Horizontal);
+        _columnsHost.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        _columnsHost.verticalScrollerVisibility   = ScrollerVisibility.Hidden;
         _columnsHost.style.flexGrow      = 1;
         _columnsHost.style.flexDirection = FlexDirection.Row;
         _columnsHost.contentContainer.style.flexDirection = FlexDirection.Row;
@@ -171,7 +136,7 @@ internal sealed class MillerColumnsWindow : EditorWindow
         };
         _searchList.bindItem       = (row, i) => BindRow(row, _searchResults[i], -1, i, _searchList, showFullPath: true);
         _searchList.selectionChanged += _ => RefreshListSafe(_searchList);
-        _searchList.style.flexGrow = 1;
+        _searchList.AddToClassList("dropdown-list");
         _searchList.style.display  = DisplayStyle.None;
         return _searchList;
     }
@@ -186,16 +151,17 @@ internal sealed class MillerColumnsWindow : EditorWindow
             AddColumn(_pathFolders[k], k + 1);
 
         _focusedColumn = Mathf.Clamp(_focusedColumn, 0, _columnLists.Count - 1);
-        _columnsHost.schedule.Execute(() => _columnsHost.horizontalScroller.value = _columnsHost.horizontalScroller.highValue).StartingIn(0);
+        _columnsHost.schedule.Execute(() =>
+        {
+            if (_focusedColumn >= 0 && _focusedColumn < _columnLists.Count)
+                _columnsHost.ScrollTo(_columnLists[_focusedColumn]);
+        }).StartingIn(0);
     }
 
     private void AddColumn(DropdownNode owner, int columnIndex)
     {
         var column = new VisualElement();
-        column.style.width            = ColumnWidth;
-        column.style.flexShrink       = 0;
-        column.style.borderRightWidth = 1;
-        column.style.borderRightColor = C_BORDER;
+        column.AddToClassList("dropdown-column");
 
         var items = owner.Children;
         var list  = new ListView
@@ -209,7 +175,7 @@ internal sealed class MillerColumnsWindow : EditorWindow
         list.bindItem = (row, i) => BindRow(row, items[i], capturedColumn, i, list, showFullPath: false);
         list.selectionChanged += _ => RefreshListSafe(list);
         list.RegisterCallback<PointerDownEvent>(_ => _focusedColumn = capturedColumn, TrickleDown.TrickleDown);
-        list.style.flexGrow = 1;
+        list.AddToClassList("dropdown-list");
 
         if (capturedColumn < _pathFolders.Count)
         {
@@ -233,39 +199,22 @@ internal sealed class MillerColumnsWindow : EditorWindow
     private VisualElement MakeRow()
     {
         var row = new VisualElement();
-        row.style.flexDirection = FlexDirection.Row;
-        row.style.alignItems    = Align.Center;
-        row.style.paddingLeft   = 10;
-        row.style.paddingRight  = 8;
-        row.userData            = new RowRef();
+        row.AddToClassList("dropdown-row");
+        row.userData = new RowRef();
 
         var iconImg = new Image { name = "icon" };
-        iconImg.style.width       = 16;
-        iconImg.style.height      = 16;
-        iconImg.style.marginRight = 6;
-        iconImg.style.flexShrink  = 0;
+        iconImg.AddToClassList("dropdown-icon");
 
         var label = new Label { name = "label" };
-        label.style.flexGrow       = 1;
-        label.style.fontSize       = 12;
-        label.style.color          = C_TEXT;
-        label.style.unityTextAlign = TextAnchor.MiddleLeft;
+        label.AddToClassList("dropdown-label");
 
         var baseLabel = new Label { name = "base" };
-        baseLabel.style.fontSize       = 9;
-        baseLabel.style.color          = C_RIGHT;
-        baseLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        baseLabel.style.marginLeft     = 8;
-        baseLabel.style.flexShrink     = 0;
-        baseLabel.style.display        = DisplayStyle.None;
+        baseLabel.AddToClassList("dropdown-right");
+        baseLabel.style.display = DisplayStyle.None;
 
         var arrow = new Label("›") { name = "arrow" };
-        arrow.style.fontSize = 14;
-        arrow.style.color    = C_SUBTEXT;
-        arrow.style.display  = DisplayStyle.None;
-
-        row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = C_HOVER);
-        row.RegisterCallback<PointerLeaveEvent>(_ => ApplyRowBackground(row));
+        arrow.AddToClassList("dropdown-arrow");
+        arrow.style.display = DisplayStyle.None;
 
         row.RegisterCallback<PointerDownEvent>(e =>
         {
@@ -310,24 +259,9 @@ internal sealed class MillerColumnsWindow : EditorWindow
         baseLbl.text          = showBase ? node.RightText : string.Empty;
         baseLbl.style.display = showBase ? DisplayStyle.Flex : DisplayStyle.None;
 
-        row.style.backgroundColor = ResolveRowBackground(node, column, index, list);
-    }
-
-    private Color ResolveRowBackground(DropdownNode node, int column, int index, ListView list)
-    {
         bool isActiveFolder = column >= 0 && column < _pathFolders.Count && _pathFolders[column] == node;
-        if (isActiveFolder) return new Color(C_ACCENT.r, C_ACCENT.g, C_ACCENT.b, 0.18f);
-        if (index == list.selectedIndex) return C_HOVER;
-        return index % 2 == 0 ? C_TRANSPARENT : C_ROW_ALT;
-    }
-
-    private void ApplyRowBackground(VisualElement row)
-    {
-        if (!(row.userData is RowRef r) || r.Node == null) return;
-        int column = r.Column;
-        var list   = column < 0 ? _searchList : _columnLists[column];
-        int index  = (list.itemsSource as IList<DropdownNode>)?.IndexOf(r.Node) ?? -1;
-        row.style.backgroundColor = ResolveRowBackground(r.Node, column, index, list);
+        row.EnableInClassList("dropdown-row--active", isActiveFolder);
+        row.EnableInClassList("dropdown-row--selected", index == list.selectedIndex);
     }
 
     private void OnItemClicked(DropdownNode node, int column)

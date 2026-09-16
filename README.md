@@ -172,6 +172,58 @@ public ScriptableObject difficultyLevel;
 public InterfaceReference<IInputHandler> input;
 ```
 
+## Custom Dropdown (`AdvancedDropdownBuilder`)
+
+A reusable, styled dropdown used by the selector drawers and available on its own. You feed it
+slash-separated paths (which become a folder tree) and a callback, then `Show(...)` it anchored to a
+UI Toolkit element.
+
+```csharp
+new AdvancedDropdownBuilder()
+    .AddElements(new[]
+    {
+        ("Weapons/Melee/Sword", swordId),
+        ("Weapons/Ranged/Bow",  bowId),
+        ("Consumables/Potion",  potionId),
+    }, out var values)
+    .SetCallback(i => Pick(values[i]))
+    .WithRenderMode(DropdownRenderMode.MillerColumns)   // optional; default is SearchDrilldown
+    .ShowTitle()                                        // optional; title bar is hidden by default
+    .Build()
+    .Show(button.worldBound);
+```
+
+Optional: `SetCreateOption(...)` adds a "＋ Create" row while searching, `SetItemContextHandler(...)`
+enables right-click on leaves, `WithTitle(...)` sets the title text (shown only with `ShowTitle()`).
+
+### Render modes
+
+The same tree can be shown four ways via `WithRenderMode(DropdownRenderMode.*)`:
+
+| Mode | Best for |
+|---|---|
+| **SearchDrilldown** (default) | Large sets where you know the name — search box + drill in/out |
+| **MillerColumns** | Browsing a hierarchy, comparing siblings across columns |
+| **Accordion** | Scanning several branches at once, expanded in place |
+| **CascadingFlyouts** | Fast mouse traversal of a known path (browse-only, no search) |
+
+![SearchDrilldown](Documentation~/images/search-drilldown.png)
+![MillerColumns](Documentation~/images/miller-columns.png)
+![Accordion](Documentation~/images/accordion.png)
+![CascadingFlyouts](Documentation~/images/cascading-flyouts.png)
+
+### Keyboard
+
+Consistent across all modes, with two focus zones:
+
+- **In the search field:** `↓` moves into the list (past the preselected first row); `↑` is ignored;
+  `←`/`→` edit the search text; `Enter` activates the selection; typing filters.
+- **In the list:** `↑`/`↓` move; `→`/`Enter` descend into a folder (`Enter` also selects a leaf);
+  `←`/`Backspace` go back; any printable key jumps back to the search field and filters.
+- `Esc` closes. CascadingFlyouts is browse-only (no search field).
+
+Try all four live via **Tools → SelectorAttributes → Dropdown Render Mode Tester**.
+
 ## Notes
 
 - `[TypeSelector]` requires `[SerializeReference]`; automatic filtering excludes abstracts, Unity Objects, and `[HideInSelector]` types

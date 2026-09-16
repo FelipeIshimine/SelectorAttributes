@@ -1,0 +1,137 @@
+.dropdown-panel {
+    flex-direction: column;
+    flex-grow: 1;
+    background-color: #2E2E2E;
+    border-width: 1px;
+    border-color: #171717;
+}
+
+.dropdown-header {
+    flex-direction: row;
+    align-items: center;
+    min-height: 30px;
+    padding: 4px 8px 4px 4px;
+    background-color: #212121;
+    border-bottom-width: 1px;
+    border-bottom-color: #171717;
+}
+
+.dropdown-title {
+    flex-grow: 1;
+    font-size: 12px;
+    color: #D9D9D9;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+
+.dropdown-back {
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+    padding: 0;
+    margin-right: 2px;
+    background-color: rgba(0, 0, 0, 0);
+    color: #3F7DF5;
+    border-width: 0;
+    border-radius: 4px;
+    -unity-text-align: middle-center;
+}
+
+.dropdown-back:hover {
+    background-color: rgba(63, 125, 245, 0.15);
+}
+
+.dropdown-searchbar {
+    padding: 5px 6px;
+    background-color: #2E2E2E;
+    border-bottom-width: 1px;
+    border-bottom-color: #171717;
+}
+
+.dropdown-searchbar .unity-base-field__input {
+    background-color: #212121;
+    color: #D9D9D9;
+    border-width: 1px;
+    border-color: #171717;
+    border-radius: 4px;
+}
+
+.dropdown-placeholder {
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    font-size: 12px;
+    color: #808080;
+    -unity-text-align: middle-left;
+}
+
+.dropdown-list {
+    flex-grow: 1;
+}
+
+.dropdown-column {
+    width: 240px;
+    flex-shrink: 0;
+    border-right-width: 1px;
+    border-right-color: #171717;
+}
+
+.dropdown-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 28px;
+    padding-left: 10px;
+    padding-right: 8px;
+}
+
+.dropdown-row:hover {
+    background-color: #474747;
+}
+
+.dropdown-row--selected {
+    background-color: #474747;
+}
+
+.dropdown-row--active {
+    background-color: rgba(63, 125, 245, 0.18);
+}
+
+.dropdown-row--dim {
+    opacity: 0.45;
+}
+
+.dropdown-twist {
+    width: 14px;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #808080;
+    -unity-text-align: middle-center;
+}
+
+.dropdown-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.dropdown-label {
+    flex-grow: 1;
+    font-size: 12px;
+    color: #D9D9D9;
+    -unity-text-align: middle-left;
+}
+
+.dropdown-right {
+    font-size: 9px;
+    color: #7FD6E8;
+    -unity-text-align: middle-right;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.dropdown-arrow {
+    font-size: 14px;
+    color: #808080;
+}

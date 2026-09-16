@@ -4,7 +4,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using static DropdownTheme;
 
 internal sealed class AccordionRenderer : IDropdownRenderer
 {
@@ -25,6 +24,7 @@ internal sealed class AccordionWindow : EditorWindow
         win._onCreate          = data.OnCreate;
         win._createLabelFormat = data.CreateLabelFormat;
         win._onItemContext     = data.OnItemContext;
+        win._showTitle         = data.ShowTitleBar;
         win.ShowAsDropDown(screenRect, new Vector2(Mathf.Max(screenRect.width, 260), 340));
     }
 
@@ -38,6 +38,7 @@ internal sealed class AccordionWindow : EditorWindow
     private string _search = "";
     private bool   _searchFocused = true;
     private bool   _refreshingSelection;
+    private bool   _showTitle;
 
     private readonly HashSet<DropdownNode> _expanded       = new();
     private readonly HashSet<DropdownNode> _matchLeaves    = new();
@@ -64,11 +65,9 @@ internal sealed class AccordionWindow : EditorWindow
     private void CreateGUI()
     {
         var root = rootVisualElement;
-        root.style.flexDirection   = FlexDirection.Column;
-        root.style.flexGrow        = 1;
-        root.style.backgroundColor = C_BG;
+        DropdownTheme.ApplyPanel(root);
 
-        root.Add(BuildHeader());
+        if (_showTitle) root.Add(BuildHeader());
         root.Add(BuildSearchBar());
         root.Add(BuildList());
 
@@ -83,23 +82,10 @@ internal sealed class AccordionWindow : EditorWindow
     private VisualElement BuildHeader()
     {
         var header = new VisualElement();
-        header.style.flexDirection     = FlexDirection.Row;
-        header.style.alignItems        = Align.Center;
-        header.style.minHeight         = 30;
-        header.style.paddingLeft       = 8;
-        header.style.paddingRight      = 8;
-        header.style.paddingTop        = 4;
-        header.style.paddingBottom     = 4;
-        header.style.backgroundColor   = C_HEADER;
-        header.style.borderBottomWidth = 1;
-        header.style.borderBottomColor = C_BORDER;
+        header.AddToClassList("dropdown-header");
 
         _titleLabel = new Label(_title ?? string.Empty);
-        _titleLabel.style.flexGrow                = 1;
-        _titleLabel.style.fontSize                = 12;
-        _titleLabel.style.color                   = C_TEXT;
-        _titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-        _titleLabel.style.unityTextAlign          = TextAnchor.MiddleCenter;
+        _titleLabel.AddToClassList("dropdown-title");
 
         header.Add(_titleLabel);
         return header;
@@ -108,39 +94,16 @@ internal sealed class AccordionWindow : EditorWindow
     private VisualElement BuildSearchBar()
     {
         var bar = new VisualElement();
-        bar.style.paddingLeft       = 6; bar.style.paddingRight  = 6;
-        bar.style.paddingTop        = 5; bar.style.paddingBottom = 5;
-        bar.style.backgroundColor   = C_BG;
-        bar.style.borderBottomWidth = 1;
-        bar.style.borderBottomColor = C_BORDER;
+        bar.AddToClassList("dropdown-searchbar");
 
         _searchField = new TextField();
         _searchField.style.flexGrow = 1;
         _searchField.RegisterCallback<FocusInEvent>(_  => _searchFocused = true);
         _searchField.RegisterCallback<FocusOutEvent>(_ => _searchFocused = false);
 
-        _searchField.RegisterCallbackOnce<AttachToPanelEvent>(_ =>
-        {
-            var input = _searchField.Q(className: "unity-base-field__input");
-            if (input == null) return;
-            input.style.backgroundColor = new Color(0.13f, 0.13f, 0.13f);
-            input.style.color           = C_TEXT;
-            input.style.borderTopWidth  = input.style.borderRightWidth =
-                input.style.borderBottomWidth = input.style.borderLeftWidth = 1;
-            input.style.borderTopColor  = input.style.borderRightColor =
-                input.style.borderBottomColor = input.style.borderLeftColor = C_BORDER;
-            SetBorderRadius(input.style, 4);
-        });
-
         var placeholder = new Label("Search...");
-        placeholder.style.position       = Position.Absolute;
-        placeholder.style.left           = 10;
-        placeholder.style.top            = 0;
-        placeholder.style.bottom         = 0;
-        placeholder.style.fontSize       = 12;
-        placeholder.style.color          = C_SUBTEXT;
-        placeholder.style.unityTextAlign = TextAnchor.MiddleLeft;
-        placeholder.pickingMode          = PickingMode.Ignore;
+        placeholder.AddToClassList("dropdown-placeholder");
+        placeholder.pickingMode = PickingMode.Ignore;
 
         _searchField.RegisterValueChangedCallback(e =>
         {
@@ -163,6 +126,7 @@ internal sealed class AccordionWindow : EditorWindow
             makeItem        = MakeRow,
             bindItem        = BindRow,
         };
+        _listView.AddToClassList("dropdown-list");
         _listView.selectionChanged += _ =>
         {
             if (_refreshingSelection) return;
@@ -170,47 +134,27 @@ internal sealed class AccordionWindow : EditorWindow
             _listView.RefreshItems();
             _refreshingSelection = false;
         };
-        _listView.style.flexGrow = 1;
         return _listView;
     }
 
     private VisualElement MakeRow()
     {
         var row = new VisualElement();
-        row.style.flexDirection = FlexDirection.Row;
-        row.style.alignItems    = Align.Center;
-        row.style.paddingRight  = 8;
-        row.userData            = new RowRef();
+        row.AddToClassList("dropdown-row");
+        row.userData = new RowRef();
 
         var twist = new Label { name = "twist" };
-        twist.style.width          = IndentPerDepth;
-        twist.style.flexShrink     = 0;
-        twist.style.fontSize       = 10;
-        twist.style.color          = C_SUBTEXT;
-        twist.style.unityTextAlign = TextAnchor.MiddleCenter;
+        twist.AddToClassList("dropdown-twist");
 
         var iconImg = new Image { name = "icon" };
-        iconImg.style.width       = 16;
-        iconImg.style.height      = 16;
-        iconImg.style.marginRight = 6;
-        iconImg.style.flexShrink  = 0;
+        iconImg.AddToClassList("dropdown-icon");
 
         var label = new Label { name = "label" };
-        label.style.flexGrow       = 1;
-        label.style.fontSize       = 12;
-        label.style.color          = C_TEXT;
-        label.style.unityTextAlign = TextAnchor.MiddleLeft;
+        label.AddToClassList("dropdown-label");
 
         var baseLabel = new Label { name = "base" };
-        baseLabel.style.fontSize       = 9;
-        baseLabel.style.color          = C_RIGHT;
-        baseLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        baseLabel.style.marginLeft     = 8;
-        baseLabel.style.flexShrink     = 0;
-        baseLabel.style.display        = DisplayStyle.None;
-
-        row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = C_HOVER);
-        row.RegisterCallback<PointerLeaveEvent>(_ => ApplyRowBackground(row));
+        baseLabel.AddToClassList("dropdown-right");
+        baseLabel.style.display = DisplayStyle.None;
 
         row.RegisterCallback<PointerDownEvent>(e =>
         {
@@ -257,22 +201,8 @@ internal sealed class AccordionWindow : EditorWindow
         baseLbl.text          = showBase ? node.RightText : string.Empty;
         baseLbl.style.display = showBase ? DisplayStyle.Flex : DisplayStyle.None;
 
-        row.style.opacity         = entry.Dim ? 0.45f : 1f;
-        row.style.backgroundColor = ResolveRowBackground(index);
-    }
-
-    private Color ResolveRowBackground(int index)
-    {
-        if (index == _listView.selectedIndex) return C_HOVER;
-        return index % 2 == 0 ? C_TRANSPARENT : C_ROW_ALT;
-    }
-
-    private void ApplyRowBackground(VisualElement row)
-    {
-        if (!(row.userData is RowRef r) || r.Node == null) return;
-        int index = _visible.FindIndex(v => v.Node == r.Node);
-        if (index < 0) return;
-        row.style.backgroundColor = ResolveRowBackground(index);
+        row.EnableInClassList("dropdown-row--dim", entry.Dim);
+        row.EnableInClassList("dropdown-row--selected", index == _listView.selectedIndex);
     }
 
     private bool IsExpanded(DropdownNode folder) =>

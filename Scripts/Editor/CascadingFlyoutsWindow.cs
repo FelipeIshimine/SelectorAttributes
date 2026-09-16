@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using static DropdownTheme;
 
 internal sealed class CascadingFlyoutsRenderer : IDropdownRenderer
 {
@@ -16,7 +15,6 @@ internal sealed class FlyoutChain
     private const float MaxHeight  = 340f;
 
     private readonly BuiltDropdown      _data;
-    private readonly Rect               _rootAnchor;
     private readonly List<FlyoutWindow> _levels = new();
 
     private bool _disposed;
@@ -26,25 +24,24 @@ internal sealed class FlyoutChain
 
     internal static void Open(Rect screenRect, BuiltDropdown data)
     {
-        var chain = new FlyoutChain(screenRect, data);
+        var chain = new FlyoutChain(data);
         var rect  = new Rect(screenRect.x, screenRect.yMax, Mathf.Max(screenRect.width, PanelWidth), 0);
-        chain.OpenLevel(0, data.Root, rect, isRoot: true);
+        chain.OpenLevel(0, data.Root, rect);
     }
 
-    private FlyoutChain(Rect rootAnchor, BuiltDropdown data)
+    private FlyoutChain(BuiltDropdown data)
     {
-        _rootAnchor = rootAnchor;
-        _data       = data;
+        _data = data;
     }
 
-    private void OpenLevel(int level, DropdownNode owner, Rect rect, bool isRoot)
+    private void OpenLevel(int level, DropdownNode owner, Rect rect)
     {
         var win = ScriptableObject.CreateInstance<FlyoutWindow>();
         win.hideFlags = HideFlags.DontSave;
-        win.Init(this, level, owner, isRoot);
+        win.Init(this, level, owner);
 
         int   count  = owner.Children.Count;
-        float height = Mathf.Min(count * RowHeight + (isRoot ? 34f : 0f) + 8f, MaxHeight);
+        float height = Mathf.Min(count * RowHeight + 8f, MaxHeight);
         rect.height  = Mathf.Max(height, RowHeight + 8f);
 
         win.position = rect;
@@ -68,7 +65,7 @@ internal sealed class FlyoutChain
         if (x + PanelWidth > screenW) x = rowScreen.x - PanelWidth + 2f;
         float y = Mathf.Min(rowScreen.y, Mathf.Max(0f, screenH - height));
 
-        OpenLevel(parentLevel + 1, folder, new Rect(x, y, PanelWidth, height), isRoot: false);
+        OpenLevel(parentLevel + 1, folder, new Rect(x, y, PanelWidth, height));
     }
 
     internal void CloseDeeperThan(int level)
@@ -89,14 +86,6 @@ internal sealed class FlyoutChain
         cb?.Invoke(index);
     }
 
-    internal void FallbackToSearch()
-    {
-        var data = _data;
-        var rect = _rootAnchor;
-        CloseAll();
-        new SearchDrilldownRenderer().Show(rect, data);
-    }
-
     internal bool Contains(EditorWindow w) => w != null && _levels.Contains(w as FlyoutWindow);
 
     internal void CloseAll()
@@ -114,42 +103,28 @@ internal sealed class FlyoutWindow : EditorWindow
     private FlyoutChain  _chain;
     private int          _level;
     private DropdownNode _owner;
-    private bool         _isRoot;
 
     private IVisualElementScheduledItem _pendingOpen;
 
     private ScrollView          _scroll;
-    private TextField           _searchField;
     private readonly List<VisualElement> _rowEls = new();
     private readonly List<DropdownNode>  _nodes  = new();
     private int  _selected = -1;
-    private bool _searchFocused;
-    private bool _initialFocusDone;
 
-    internal void Init(FlyoutChain chain, int level, DropdownNode owner, bool isRoot)
+    internal void Init(FlyoutChain chain, int level, DropdownNode owner)
     {
-        _chain  = chain;
-        _level  = level;
-        _owner  = owner;
-        _isRoot = isRoot;
+        _chain = chain;
+        _level = level;
+        _owner = owner;
     }
 
     private void CreateGUI()
     {
         var root = rootVisualElement;
-        root.style.flexDirection   = FlexDirection.Column;
-        root.style.flexGrow        = 1;
-        root.style.backgroundColor = C_BG;
-        root.style.borderTopWidth  = root.style.borderRightWidth =
-            root.style.borderBottomWidth = root.style.borderLeftWidth = 1;
-        root.style.borderTopColor  = root.style.borderRightColor =
-            root.style.borderBottomColor = root.style.borderLeftColor = C_BORDER;
+        DropdownTheme.ApplyPanel(root);
 
         root.focusable = true;
         root.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
-
-        if (_isRoot)
-            root.Add(BuildSearchBar());
 
         _scroll = new ScrollView(ScrollViewMode.Vertical);
         _scroll.style.flexGrow = 1;
@@ -174,90 +149,31 @@ internal sealed class FlyoutWindow : EditorWindow
     {
         var root = rootVisualElement;
         if (root == null) return;
-        root.schedule.Execute(() =>
-        {
-            if (_isRoot && !_initialFocusDone && _searchField != null)
-            {
-                _initialFocusDone = true;
-                _searchField.Focus();
-            }
-            else
-            {
-                root.Focus();
-            }
-        }).StartingIn(0);
-    }
-
-    private VisualElement BuildSearchBar()
-    {
-        var bar = new VisualElement();
-        bar.style.paddingLeft       = 6; bar.style.paddingRight  = 6;
-        bar.style.paddingTop        = 5; bar.style.paddingBottom = 5;
-        bar.style.backgroundColor   = C_BG;
-        bar.style.borderBottomWidth = 1;
-        bar.style.borderBottomColor = C_BORDER;
-
-        _searchField = new TextField();
-        _searchField.style.flexGrow = 1;
-        _searchField.RegisterCallback<FocusInEvent>(_  => _searchFocused = true);
-        _searchField.RegisterCallback<FocusOutEvent>(_ => _searchFocused = false);
-        _searchField.RegisterValueChangedCallback(e =>
-        {
-            if (!string.IsNullOrEmpty(e.newValue)) _chain.FallbackToSearch();
-        });
-
-        var placeholder = new Label("Type to search...");
-        placeholder.style.position       = Position.Absolute;
-        placeholder.style.left           = 10;
-        placeholder.style.top            = 0;
-        placeholder.style.bottom         = 0;
-        placeholder.style.fontSize       = 12;
-        placeholder.style.color          = C_SUBTEXT;
-        placeholder.style.unityTextAlign = TextAnchor.MiddleLeft;
-        placeholder.pickingMode          = PickingMode.Ignore;
-
-        bar.Add(_searchField);
-        bar.Add(placeholder);
-        return bar;
+        root.schedule.Execute(() => root.Focus()).StartingIn(0);
     }
 
     private VisualElement BuildRow(DropdownNode node, int index)
     {
         var row = new VisualElement();
-        row.style.flexDirection = FlexDirection.Row;
-        row.style.alignItems    = Align.Center;
-        row.style.minHeight     = 28;
-        row.style.paddingLeft   = 10;
-        row.style.paddingRight  = 8;
+        row.AddToClassList("dropdown-row");
 
         var iconImg = new Image();
-        iconImg.style.width       = 16;
-        iconImg.style.height      = 16;
-        iconImg.style.marginRight = 6;
-        iconImg.style.flexShrink  = 0;
-        iconImg.image             = node.Icon;
-        iconImg.style.display     = node.Icon != null ? DisplayStyle.Flex : DisplayStyle.None;
+        iconImg.AddToClassList("dropdown-icon");
+        iconImg.image         = node.Icon;
+        iconImg.style.display = node.Icon != null ? DisplayStyle.Flex : DisplayStyle.None;
 
         var label = new Label(node.Label);
-        label.style.flexGrow       = 1;
-        label.style.fontSize       = 12;
-        label.style.color          = C_TEXT;
-        label.style.unityTextAlign = TextAnchor.MiddleLeft;
+        label.AddToClassList("dropdown-label");
 
         var baseLabel = new Label();
-        baseLabel.style.fontSize       = 9;
-        baseLabel.style.color          = C_RIGHT;
-        baseLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        baseLabel.style.marginLeft     = 8;
-        baseLabel.style.flexShrink     = 0;
+        baseLabel.AddToClassList("dropdown-right");
         bool showBase = node.IsLeaf && !string.IsNullOrEmpty(node.RightText);
         baseLabel.text          = showBase ? node.RightText : string.Empty;
         baseLabel.style.display = showBase ? DisplayStyle.Flex : DisplayStyle.None;
 
         var arrow = new Label("›");
-        arrow.style.fontSize = 14;
-        arrow.style.color    = C_SUBTEXT;
-        arrow.style.display  = node.IsFolder ? DisplayStyle.Flex : DisplayStyle.None;
+        arrow.AddToClassList("dropdown-arrow");
+        arrow.style.display = node.IsFolder ? DisplayStyle.Flex : DisplayStyle.None;
 
         row.tooltip = node.Tooltip ?? string.Empty;
 
@@ -293,7 +209,7 @@ internal sealed class FlyoutWindow : EditorWindow
     {
         _selected = Mathf.Clamp(index, 0, _nodes.Count - 1);
         for (int i = 0; i < _rowEls.Count; i++)
-            _rowEls[i].style.backgroundColor = i == _selected ? C_HOVER : C_TRANSPARENT;
+            _rowEls[i].EnableInClassList("dropdown-row--selected", i == _selected);
         if (_selected >= 0 && _selected < _rowEls.Count)
             _scroll.ScrollTo(_rowEls[_selected]);
     }
@@ -304,28 +220,6 @@ internal sealed class FlyoutWindow : EditorWindow
         {
             _chain.CloseAll();
             e.StopPropagation();
-            return;
-        }
-
-        if (_searchFocused)
-        {
-            switch (e.keyCode)
-            {
-                case KeyCode.DownArrow:
-                    EnterListZone();
-                    e.StopPropagation();
-                    return;
-
-                case KeyCode.UpArrow:
-                    e.StopPropagation();
-                    return;
-
-                case KeyCode.Return:
-                case KeyCode.KeypadEnter:
-                    ActivateSelected();
-                    e.StopPropagation();
-                    return;
-            }
             return;
         }
 
@@ -352,47 +246,21 @@ internal sealed class FlyoutWindow : EditorWindow
 
             case KeyCode.Return:
             case KeyCode.KeypadEnter:
-                ActivateSelected();
+            {
+                var node = SelectedNode();
+                if (node == null) return;
+                if (node.IsLeaf) _chain.SelectLeaf(node.Index);
+                else             _chain.OpenChild(_level, node, RowScreenRect(_rowEls[_selected]));
                 e.StopPropagation();
                 return;
+            }
 
             case KeyCode.LeftArrow:
             case KeyCode.Backspace:
                 if (_level > 0) _chain.CloseDeeperThan(_level - 1);
                 e.StopPropagation();
                 return;
-
-            default:
-                if (DropdownKeys.IsTypingChar(e))
-                {
-                    if (_isRoot && _searchField != null)
-                    {
-                        _searchField.value += e.character;
-                        _searchField.Focus();
-                    }
-                    else
-                    {
-                        _chain.FallbackToSearch();
-                    }
-                    e.StopPropagation();
-                }
-                return;
         }
-    }
-
-    private void ActivateSelected()
-    {
-        var node = SelectedNode();
-        if (node == null) return;
-        if (node.IsLeaf) _chain.SelectLeaf(node.Index);
-        else             _chain.OpenChild(_level, node, RowScreenRect(_rowEls[_selected]));
-    }
-
-    private void EnterListZone()
-    {
-        if (_nodes.Count == 0) return;
-        SetSelected(_selected < 0 ? 0 : _selected + 1);
-        rootVisualElement.Focus();
     }
 
     private DropdownNode SelectedNode() =>

@@ -9,7 +9,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using static DropdownTheme;
 
 // ── Public struct (unchanged) ─────────────────────────────────────────────────
 
@@ -41,8 +40,12 @@ public sealed class AdvancedDropdownBuilder
     private string                              _createLabelFormat = "＋ Create \"{0}\"";
     private Action<int>                         _onItemContext;
     private DropdownRenderMode                  _renderMode = DropdownRenderMode.SearchDrilldown;
+    private bool                                _showTitle;
 
     public AdvancedDropdownBuilder WithTitle(string title)      { _title     = title; return this; }
+
+    /// <summary>Shows the title bar at the top of the dropdown. Hidden by default.</summary>
+    public AdvancedDropdownBuilder ShowTitle(bool show = true)  { _showTitle = show;  return this; }
     public AdvancedDropdownBuilder SetSplitCharacter(char c)    { _splitChar = c;     return this; }
     public AdvancedDropdownBuilder SetCallback(Action<int> cb)  { _callback  = cb;    return this; }
 
@@ -183,6 +186,7 @@ public sealed class AdvancedDropdownBuilder
             CreateLabelFormat = _createLabelFormat,
             OnItemContext     = _onItemContext,
             RenderMode        = _renderMode,
+            ShowTitleBar      = _showTitle,
         };
     }
 }
@@ -199,6 +203,7 @@ public sealed class BuiltDropdown
     internal string              CreateLabelFormat = "＋ Create \"{0}\"";
     internal Action<int>         OnItemContext;
     internal DropdownRenderMode  RenderMode = DropdownRenderMode.SearchDrilldown;
+    internal bool                ShowTitleBar;
 
     internal BuiltDropdown(DropdownNode root, string title, Action<int> callback)
     {
@@ -256,6 +261,7 @@ internal sealed class DropdownWindow : EditorWindow
         win._onCreate          = data.OnCreate;
         win._createLabelFormat = data.CreateLabelFormat;
         win._onItemContext     = data.OnItemContext;
+        win._showTitle         = data.ShowTitleBar;
         win.ShowAsDropDown(screenRect, new Vector2(Mathf.Max(screenRect.width, 260), 340));
     }
 
@@ -272,28 +278,29 @@ internal sealed class DropdownWindow : EditorWindow
     private Action<int>        _onItemContext;
     private bool               _searchFocused = true;
     private bool               _refreshingSelection;
+    private bool               _showTitle;
 
     // ── UI refs ───────────────────────────────────────────────────────────────
 
-    private Label     _titleLabel;
-    private TextField _searchField;
-    private ListView  _listView;
-    private Button    _backButton;
+    private VisualElement _header;
+    private Label         _titleLabel;
+    private TextField     _searchField;
+    private ListView      _listView;
+    private Button        _backButton;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     private void CreateGUI()
     {
         var root = rootVisualElement;
-        root.style.flexDirection   = FlexDirection.Column;
-        root.style.flexGrow        = 1;
-        root.style.backgroundColor = C_BG;
+        DropdownTheme.ApplyPanel(root);
 
         root.Add(BuildHeader());
         root.Add(BuildSearchBar());
         root.Add(BuildList());
 
         RefreshDisplay();
+        UpdateHeader();
 
         // Focus search after first layout pass
         root.schedule.Execute(() => _searchField.Focus()).StartingIn(50);
@@ -308,43 +315,15 @@ internal sealed class DropdownWindow : EditorWindow
     private VisualElement BuildHeader()
     {
         var header = new VisualElement();
-        header.style.flexDirection     = FlexDirection.Row;
-        header.style.alignItems        = Align.Center;
-        header.style.minHeight         = 30;
-        header.style.paddingLeft       = 4;
-        header.style.paddingRight      = 8;
-        header.style.paddingTop        = 4;
-        header.style.paddingBottom     = 4;
-        header.style.backgroundColor   = C_HEADER;
-        header.style.borderBottomWidth = 1;
-        header.style.borderBottomColor = C_BORDER;
+        header.AddToClassList("dropdown-header");
+        _header = header;
 
         _backButton = new Button(GoBack) { text = "‹" };
-        _backButton.style.display         = DisplayStyle.None;
-        _backButton.style.width           = 24;
-        _backButton.style.height          = 24;
-        _backButton.style.fontSize        = 18;
-        _backButton.style.paddingLeft     = 0; _backButton.style.paddingRight  = 0;
-        _backButton.style.paddingTop      = 0; _backButton.style.paddingBottom = 0;
-        _backButton.style.marginRight     = 2;
-        _backButton.style.backgroundColor = new Color(0, 0, 0, 0);
-        _backButton.style.color           = C_ACCENT;
-        _backButton.style.borderTopWidth  = _backButton.style.borderRightWidth =
-            _backButton.style.borderBottomWidth = _backButton.style.borderLeftWidth = 0;
-        SetBorderRadius(_backButton.style, 4);
-        _backButton.style.unityTextAlign  = TextAnchor.MiddleCenter;
-
-        _backButton.RegisterCallback<PointerEnterEvent>(_ =>
-            _backButton.style.backgroundColor = new Color(C_ACCENT.r, C_ACCENT.g, C_ACCENT.b, 0.15f));
-        _backButton.RegisterCallback<PointerLeaveEvent>(_ =>
-            _backButton.style.backgroundColor = new Color(0, 0, 0, 0));
+        _backButton.AddToClassList("dropdown-back");
+        _backButton.style.display = DisplayStyle.None;
 
         _titleLabel = new Label(_title ?? string.Empty);
-        _titleLabel.style.flexGrow                = 1;
-        _titleLabel.style.fontSize                = 12;
-        _titleLabel.style.color                   = C_TEXT;
-        _titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-        _titleLabel.style.unityTextAlign          = TextAnchor.MiddleCenter;
+        _titleLabel.AddToClassList("dropdown-title");
 
         header.Add(_backButton);
         header.Add(_titleLabel);
@@ -356,50 +335,23 @@ internal sealed class DropdownWindow : EditorWindow
     private VisualElement BuildSearchBar()
     {
         var bar = new VisualElement();
-        bar.style.paddingLeft       = 6; bar.style.paddingRight  = 6;
-        bar.style.paddingTop        = 5; bar.style.paddingBottom = 5;
-        bar.style.backgroundColor   = C_BG;
-        bar.style.borderBottomWidth = 1;
-        bar.style.borderBottomColor = C_BORDER;
+        bar.AddToClassList("dropdown-searchbar");
 
         _searchField = new TextField();
         _searchField.style.flexGrow = 1;
         _searchField.RegisterCallback<FocusInEvent>(_  => _searchFocused = true);
         _searchField.RegisterCallback<FocusOutEvent>(_ => _searchFocused = false);
-
-        _searchField.RegisterCallbackOnce<AttachToPanelEvent>(_ =>
-        {
-            var input = _searchField.Q(className: "unity-base-field__input");
-            if (input == null) return;
-            input.style.backgroundColor   = new Color(0.13f, 0.13f, 0.13f);
-            input.style.color             = C_TEXT;
-            input.style.borderTopWidth    = input.style.borderRightWidth =
-                input.style.borderBottomWidth = input.style.borderLeftWidth = 1;
-            input.style.borderTopColor    = input.style.borderRightColor =
-                input.style.borderBottomColor = input.style.borderLeftColor = C_BORDER;
-            SetBorderRadius(input.style, 4);
-        });
-
         _searchField.RegisterValueChangedCallback(e =>
         {
             _search = e.newValue;
             RefreshDisplay();
         });
 
-        // Placeholder
         var placeholder = new Label("Search...");
-        placeholder.style.position       = Position.Absolute;
-        placeholder.style.left           = 10;
-        placeholder.style.top            = 0;
-        placeholder.style.bottom         = 0;
-        placeholder.style.fontSize       = 12;
-        placeholder.style.color          = C_SUBTEXT;
-        placeholder.style.unityTextAlign = TextAnchor.MiddleLeft;
-        placeholder.pickingMode          = PickingMode.Ignore;
-
+        placeholder.AddToClassList("dropdown-placeholder");
+        placeholder.pickingMode = PickingMode.Ignore;
         _searchField.RegisterValueChangedCallback(e =>
-            placeholder.style.display = string.IsNullOrEmpty(e.newValue)
-                ? DisplayStyle.Flex : DisplayStyle.None);
+            placeholder.style.display = string.IsNullOrEmpty(e.newValue) ? DisplayStyle.Flex : DisplayStyle.None);
 
         bar.Add(_searchField);
         bar.Add(placeholder);
@@ -417,6 +369,7 @@ internal sealed class DropdownWindow : EditorWindow
             makeItem        = MakeRow,
             bindItem        = BindRow,
         };
+        _listView.AddToClassList("dropdown-list");
         _listView.selectionChanged += _ =>
         {
             if (_refreshingSelection) return;
@@ -424,60 +377,34 @@ internal sealed class DropdownWindow : EditorWindow
             _listView.RefreshItems();
             _refreshingSelection = false;
         };
-        _listView.style.flexGrow = 1;
         return _listView;
     }
 
     private VisualElement MakeRow()
     {
         var row = new VisualElement();
-        row.style.flexDirection = FlexDirection.Row;
-        row.style.alignItems    = Align.Center;
-        row.style.paddingLeft   = 10;
-        row.style.paddingRight  = 8;
+        row.AddToClassList("dropdown-row");
 
         var iconImg = new Image { name = "icon" };
-        iconImg.style.width       = 16;
-        iconImg.style.height      = 16;
-        iconImg.style.marginRight = 6;
-        iconImg.style.flexShrink  = 0;
+        iconImg.AddToClassList("dropdown-icon");
 
         var label = new Label { name = "label" };
-        label.style.flexGrow       = 1;
-        label.style.fontSize       = 12;
-        label.style.color          = C_TEXT;
-        label.style.unityTextAlign = TextAnchor.MiddleLeft;
+        label.AddToClassList("dropdown-label");
 
         var baseLabel = new Label { name = "base" };
-        baseLabel.style.fontSize       = 9;
-        baseLabel.style.color          = C_RIGHT;
-        baseLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        baseLabel.style.marginLeft     = 8;
-        baseLabel.style.marginRight    = 0;
-        baseLabel.style.flexShrink     = 0;
-        baseLabel.style.display        = DisplayStyle.None;
+        baseLabel.AddToClassList("dropdown-right");
+        baseLabel.style.display = DisplayStyle.None;
 
         var arrow = new Label("›") { name = "arrow" };
-        arrow.style.fontSize = 14;
-        arrow.style.color    = C_SUBTEXT;
-        arrow.style.display  = DisplayStyle.None;
-
-        row.RegisterCallback<PointerEnterEvent>(_ =>
-            row.style.backgroundColor = C_HOVER);
-        row.RegisterCallback<PointerLeaveEvent>(_ =>
-        {
-            // Restore alternating tint on hover-out
-            if (row.userData is int idx)
-                row.style.backgroundColor = idx % 2 == 0
-                    ? new Color(0, 0, 0, 0) : C_ROW_ALT;
-        });
+        arrow.AddToClassList("dropdown-arrow");
+        arrow.style.display = DisplayStyle.None;
 
         row.RegisterCallback<PointerDownEvent>(e =>
         {
             if (!(row.userData is int idx) || idx < 0 || idx >= _display.Count) return;
             var node = _display[idx];
 
-            if (e.button == 1)   // right-click → leaf context menu (if enabled)
+            if (e.button == 1)
             {
                 if (node.IsLeaf && _onItemContext != null) { _onItemContext(node.Index); e.StopPropagation(); }
                 return;
@@ -495,42 +422,29 @@ internal sealed class DropdownWindow : EditorWindow
 
     private void BindRow(VisualElement row, int index)
     {
-	    row.userData = index;
+        row.userData = index;
 
-	    var node    = _display[index];
-	    var iconImg = row.Q<Image>("icon");
-	    var label   = row.Q<Label>("label");
-	    var arrow   = row.Q<Label>("arrow");
-	    var baseLbl = row.Q<Label>("base");
+        var node    = _display[index];
+        var iconImg = row.Q<Image>("icon");
+        var label   = row.Q<Label>("label");
+        var arrow   = row.Q<Label>("arrow");
+        var baseLbl = row.Q<Label>("base");
 
-	    // In search mode show the full path so the user knows where the node lives.
-	    label.text  = !string.IsNullOrWhiteSpace(_search) && node.FullPath != null
-	        ? node.FullPath
-	        : node.Label;
-	    row.tooltip = node.Tooltip ?? string.Empty;
+        label.text  = !string.IsNullOrWhiteSpace(_search) && node.FullPath != null
+            ? node.FullPath
+            : node.Label;
+        row.tooltip = node.Tooltip ?? string.Empty;
 
-	    if (iconImg != null)
-	    {
-		    iconImg.image         = node.Icon;
-		    iconImg.style.display = node.Icon != null ? DisplayStyle.Flex : DisplayStyle.None;
-	    }
+        iconImg.image         = node.Icon;
+        iconImg.style.display = node.Icon != null ? DisplayStyle.Flex : DisplayStyle.None;
 
-	    if (arrow != null)
-		    arrow.style.display = node.IsFolder ? DisplayStyle.Flex : DisplayStyle.None;
+        arrow.style.display = node.IsFolder ? DisplayStyle.Flex : DisplayStyle.None;
 
-	    if (baseLbl != null)
-	    {
-		    bool showBase = node.IsLeaf && !string.IsNullOrEmpty(node.RightText);
-		    baseLbl.text          = showBase ? node.RightText : string.Empty;
-		    baseLbl.style.display = showBase ? DisplayStyle.Flex : DisplayStyle.None;
-		    
-	    }
+        bool showBase = node.IsLeaf && !string.IsNullOrEmpty(node.RightText);
+        baseLbl.text          = showBase ? node.RightText : string.Empty;
+        baseLbl.style.display = showBase ? DisplayStyle.Flex : DisplayStyle.None;
 
-	    bool isSelected = index == _listView.selectedIndex;
-
-	    row.style.backgroundColor = isSelected
-		    ? C_HOVER
-		    : (index % 2 == 0 ? new Color(0, 0, 0, 0) : C_ROW_ALT);
+        row.EnableInClassList("dropdown-row--selected", index == _listView.selectedIndex);
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
@@ -611,8 +525,12 @@ internal sealed class DropdownWindow : EditorWindow
 
     private void UpdateHeader()
     {
-        bool atRoot               = _current.Parent == null;
-        _backButton.style.display = atRoot ? DisplayStyle.None : DisplayStyle.Flex;
+        bool atRoot   = _current.Parent == null;
+        bool needBack = !atRoot;
+
+        _header.style.display     = _showTitle || needBack ? DisplayStyle.Flex : DisplayStyle.None;
+        _backButton.style.display = needBack ? DisplayStyle.Flex : DisplayStyle.None;
+        _titleLabel.style.display = _showTitle ? DisplayStyle.Flex : DisplayStyle.None;
         _titleLabel.text          = atRoot ? (_title ?? string.Empty) : _current.Label;
     }
 

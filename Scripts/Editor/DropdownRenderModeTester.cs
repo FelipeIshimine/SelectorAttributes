@@ -1,7 +1,6 @@
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using static DropdownTheme;
 
 internal sealed class DropdownRenderModeTester : EditorWindow
 {
@@ -33,7 +32,8 @@ internal sealed class DropdownRenderModeTester : EditorWindow
         ("Misc/Map",                   null),
     };
 
-    private Label _result;
+    private Label  _result;
+    private Toggle _showTitle;
 
     private void CreateGUI()
     {
@@ -46,6 +46,10 @@ internal sealed class DropdownRenderModeTester : EditorWindow
         title.style.marginBottom = 8;
         root.Add(title);
 
+        _showTitle = new Toggle("Show title bar") { value = false };
+        _showTitle.style.marginBottom = 8;
+        root.Add(_showTitle);
+
         root.Add(ModeButton("Search Drilldown", DropdownRenderMode.SearchDrilldown));
         root.Add(ModeButton("Miller Columns",   DropdownRenderMode.MillerColumns));
         root.Add(ModeButton("Accordion",        DropdownRenderMode.Accordion));
@@ -53,7 +57,7 @@ internal sealed class DropdownRenderModeTester : EditorWindow
 
         _result = new Label("Last pick: (none)");
         _result.style.marginTop = 12;
-        _result.style.color     = C_SUBTEXT;
+        _result.style.color     = new Color(0.50f, 0.50f, 0.50f);
         root.Add(_result);
     }
 
@@ -66,6 +70,7 @@ internal sealed class DropdownRenderModeTester : EditorWindow
         {
             var built = new AdvancedDropdownBuilder()
                 .WithTitle($"Items — {mode}")
+                .ShowTitle(_showTitle.value)
                 .WithRenderMode(mode)
                 .AddElements(BuildElements(), out var values)
                 .SetCallback(i => _result.text = $"Last pick: {values[i]}  (via {mode})")
