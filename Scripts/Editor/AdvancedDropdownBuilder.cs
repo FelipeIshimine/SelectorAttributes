@@ -9,6 +9,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static DropdownTheme;
 
 // ── Public struct (unchanged) ─────────────────────────────────────────────────
 
@@ -39,10 +40,14 @@ public sealed class AdvancedDropdownBuilder
     private Action<string>                      _onCreate;
     private string                              _createLabelFormat = "＋ Create \"{0}\"";
     private Action<int>                         _onItemContext;
+    private DropdownRenderMode                  _renderMode = DropdownRenderMode.SearchDrilldown;
 
     public AdvancedDropdownBuilder WithTitle(string title)      { _title     = title; return this; }
     public AdvancedDropdownBuilder SetSplitCharacter(char c)    { _splitChar = c;     return this; }
     public AdvancedDropdownBuilder SetCallback(Action<int> cb)  { _callback  = cb;    return this; }
+
+    /// <summary>Selects how the built dropdown renders its tree. Defaults to <see cref="DropdownRenderMode.SearchDrilldown"/>.</summary>
+    public AdvancedDropdownBuilder WithRenderMode(DropdownRenderMode mode) { _renderMode = mode; return this; }
 
     /// <summary>
     /// Adds a synthetic "create" row shown while searching whenever no leaf exactly matches the typed
@@ -177,6 +182,7 @@ public sealed class AdvancedDropdownBuilder
             OnCreate          = _onCreate,
             CreateLabelFormat = _createLabelFormat,
             OnItemContext     = _onItemContext,
+            RenderMode        = _renderMode,
         };
     }
 }
@@ -189,9 +195,10 @@ public sealed class BuiltDropdown
     internal readonly string       Title;
     internal readonly Action<int>  Callback;
 
-    internal Action<string> OnCreate;
-    internal string         CreateLabelFormat = "＋ Create \"{0}\"";
-    internal Action<int>    OnItemContext;
+    internal Action<string>      OnCreate;
+    internal string              CreateLabelFormat = "＋ Create \"{0}\"";
+    internal Action<int>         OnItemContext;
+    internal DropdownRenderMode  RenderMode = DropdownRenderMode.SearchDrilldown;
 
     internal BuiltDropdown(DropdownNode root, string title, Action<int> callback)
     {
@@ -199,10 +206,19 @@ public sealed class BuiltDropdown
     }
 
     /// <summary>
-    /// Open the dropdown anchored below <paramref name="anchor"/>.
+    /// Open the dropdown anchored below <paramref name="anchor"/>, using the render mode set on the builder.
     /// Pass <c>element.worldBound</c> directly from a UI Toolkit element.
     /// </summary>
-    public void Show(Rect anchor) => DropdownWindow.Open(anchor, this);
+    public void Show(Rect anchor) => Show(anchor, RenderMode);
+
+    /// <summary>
+    /// Open the dropdown anchored below <paramref name="anchor"/>, overriding the render mode for this call.
+    /// </summary>
+    public void Show(Rect anchor, DropdownRenderMode mode)
+    {
+        var screenRect = DropdownRendererFactory.ToScreenRect(anchor);
+        DropdownRendererFactory.Create(mode).Show(screenRect, this);
+    }
 }
 
 // ── Internal tree ─────────────────────────────────────────────────────────────
@@ -229,16 +245,8 @@ internal sealed class DropdownWindow : EditorWindow
 {
     // ── Factory ───────────────────────────────────────────────────────────────
 
-    internal static void Open(Rect worldBound, BuiltDropdown data)
+    internal static void Open(Rect screenRect, BuiltDropdown data)
     {
-        // worldBound is in EditorWindow-local space; convert to screen space.
-        var screenRect = worldBound;
-        if (focusedWindow != null)
-        {
-            screenRect.x += focusedWindow.position.x;
-            screenRect.y += focusedWindow.position.y;
-        }
-
         var win       = CreateInstance<DropdownWindow>();
         win.hideFlags = HideFlags.DontSave;
         win._root     = data.Root;
@@ -262,6 +270,8 @@ internal sealed class DropdownWindow : EditorWindow
     private Action<string>     _onCreate;
     private string             _createLabelFormat = "＋ Create \"{0}\"";
     private Action<int>        _onItemContext;
+    private bool               _searchFocused = true;
+    private bool               _refreshingSelection;
 
     // ── UI refs ───────────────────────────────────────────────────────────────
 
@@ -269,18 +279,6 @@ internal sealed class DropdownWindow : EditorWindow
     private TextField _searchField;
     private ListView  _listView;
     private Button    _backButton;
-
-    // ── Theme ─────────────────────────────────────────────────────────────────
-
-    static readonly Color C_BG      = new(0.18f, 0.18f, 0.18f);
-    static readonly Color C_HEADER  = new(0.13f, 0.13f, 0.13f);
-    static readonly Color C_BORDER  = new(0.09f, 0.09f, 0.09f);
-    static readonly Color C_ROW_ALT = new(0.00f, 0.00f, 0.00f, 0.06f);
-    static readonly Color C_HOVER   = new(0.28f, 0.28f, 0.28f);
-    static readonly Color C_TEXT    = new(0.85f, 0.85f, 0.85f);
-    static readonly Color C_SUBTEXT = new(0.50f, 0.50f, 0.50f);
-    static readonly Color C_ACCENT  = new(0.25f, 0.49f, 0.96f);
-    static readonly Color C_RIGHT   = new(0.498f, 0.839f, 0.910f);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -301,6 +299,8 @@ internal sealed class DropdownWindow : EditorWindow
         root.schedule.Execute(() => _searchField.Focus()).StartingIn(50);
 
         root.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+        root.RegisterCallback<NavigationMoveEvent>(ev => ev.StopPropagation(), TrickleDown.TrickleDown);
+        root.RegisterCallback<NavigationSubmitEvent>(ev => ev.StopPropagation(), TrickleDown.TrickleDown);
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -364,6 +364,8 @@ internal sealed class DropdownWindow : EditorWindow
 
         _searchField = new TextField();
         _searchField.style.flexGrow = 1;
+        _searchField.RegisterCallback<FocusInEvent>(_  => _searchFocused = true);
+        _searchField.RegisterCallback<FocusOutEvent>(_ => _searchFocused = false);
 
         _searchField.RegisterCallbackOnce<AttachToPanelEvent>(_ =>
         {
@@ -415,7 +417,13 @@ internal sealed class DropdownWindow : EditorWindow
             makeItem        = MakeRow,
             bindItem        = BindRow,
         };
-        _listView.selectionChanged += _ =>_listView.RefreshItems();
+        _listView.selectionChanged += _ =>
+        {
+            if (_refreshingSelection) return;
+            _refreshingSelection = true;
+            _listView.RefreshItems();
+            _refreshingSelection = false;
+        };
         _listView.style.flexGrow = 1;
         return _listView;
     }
@@ -556,10 +564,13 @@ internal sealed class DropdownWindow : EditorWindow
     private void GoBack()
     {
         if (_current.Parent == null) return;
-        _current = _current.Parent;
-        _search  = "";
+        var from  = _current;
+        _current  = _current.Parent;
+        _search   = "";
         _searchField.SetValueWithoutNotify("");
         RefreshDisplay();
+        int idx = _display.IndexOf(from);
+        if (idx >= 0) { _listView.selectedIndex = idx; _listView.ScrollToItem(idx); }
         UpdateHeader();
     }
 
@@ -575,7 +586,7 @@ internal sealed class DropdownWindow : EditorWindow
         {
             var query  = _search.ToLowerInvariant();
             var scored = new List<(DropdownNode node, int score)>();
-            CollectScoredLeaves(_root, query, scored);
+            DropdownSearch.CollectScoredLeaves(_root, query, scored);
             scored.Sort((a, b) => b.score.CompareTo(a.score));
             foreach (var (node, _) in scored)
                 _display.Add(node);
@@ -598,59 +609,6 @@ internal sealed class DropdownWindow : EditorWindow
             _listView.selectedIndex = 0;
     }
 
-    private static void CollectScoredLeaves(DropdownNode node, string query, List<(DropdownNode, int)> results)
-    {
-        foreach (var child in node.Children)
-        {
-            if (child.IsLeaf)
-            {
-                var score = FuzzyScore(child.FullPath ?? child.Label, query);
-                if (score > 0) results.Add((child, score));
-            }
-            else
-            {
-                CollectScoredLeaves(child, query, results);
-            }
-        }
-    }
-
-    // Scores a full path against a query string.
-    // Returns 0 for no match. Higher = better match.
-    // Bonuses: exact substring > consecutive run > word-start > in-order subsequence.
-    private static int FuzzyScore(string text, string query)
-    {
-        var lText  = text.ToLowerInvariant();
-
-        // Exact substring anywhere in the full path: strong base score, shorter path wins ties.
-        if (lText.Contains(query))
-            return 10000 - text.Length;
-
-        // Subsequence match with progressive bonuses.
-        int score       = 0;
-        int textIdx     = 0;
-        int consecutive = 0;
-
-        foreach (var qc in query)
-        {
-            bool matched = false;
-            for (var i = textIdx; i < lText.Length; i++)
-            {
-                if (lText[i] != qc) { consecutive = 0; continue; }
-
-                bool wordStart = i == 0 || lText[i - 1] == '/' || lText[i - 1] == ' ' || lText[i - 1] == '_';
-                score += 1 + consecutive + (wordStart ? 8 : 0);
-                consecutive++;
-                textIdx = i + 1;
-                matched = true;
-                break;
-            }
-
-            if (!matched) return 0;
-        }
-
-        return score;
-    }
-
     private void UpdateHeader()
     {
         bool atRoot               = _current.Parent == null;
@@ -662,18 +620,53 @@ internal sealed class DropdownWindow : EditorWindow
 
     private void OnKeyDown(KeyDownEvent e)
     {
+        if (e.keyCode == KeyCode.Escape)
+        {
+            Close();
+            e.StopPropagation();
+            return;
+        }
+
+        if (_searchFocused)
+        {
+            switch (e.keyCode)
+            {
+                case KeyCode.DownArrow:
+                    EnterList();
+                    e.StopPropagation();
+                    return;
+
+                case KeyCode.UpArrow:
+                    e.StopPropagation();
+                    return;
+
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    int i = _listView.selectedIndex;
+                    if (i >= 0 && i < _display.Count) OnItemClicked(_display[i]);
+                    e.StopPropagation();
+                    return;
+                }
+            }
+            return;
+        }
+
         switch (e.keyCode)
         {
-            case KeyCode.Escape:
-                Close();
-                e.StopPropagation();
-                return;
-
-            // Backspace with empty search → go up one folder
             case KeyCode.Backspace when string.IsNullOrEmpty(_search) && _current.Parent != null:
+            case KeyCode.LeftArrow when string.IsNullOrEmpty(_search) && _current.Parent != null:
                 GoBack();
                 e.StopPropagation();
                 return;
+
+            case KeyCode.RightArrow when string.IsNullOrEmpty(_search):
+            {
+                int i = _listView.selectedIndex;
+                if (i >= 0 && i < _display.Count && _display[i].IsFolder) OnItemClicked(_display[i]);
+                e.StopPropagation();
+                return;
+            }
 
             case KeyCode.UpArrow:
             {
@@ -704,14 +697,25 @@ internal sealed class DropdownWindow : EditorWindow
                 e.StopPropagation();
                 return;
             }
+
+            default:
+                if (DropdownKeys.IsTypingChar(e))
+                {
+                    _searchField.value += e.character;
+                    _searchField.Focus();
+                    e.StopPropagation();
+                }
+                return;
         }
     }
 
-    // ── Style helpers ─────────────────────────────────────────────────────────
-
-    private static void SetBorderRadius(IStyle s, float r)
+    private void EnterList()
     {
-        s.borderTopLeftRadius = s.borderTopRightRadius =
-            s.borderBottomLeftRadius = s.borderBottomRightRadius = r;
+        if (_display.Count == 0) return;
+        int sel  = _listView.selectedIndex;
+        int next = sel < 0 ? 0 : Mathf.Min(sel + 1, _display.Count - 1);
+        _listView.selectedIndex = next;
+        _listView.ScrollToItem(next);
+        _listView.Focus();
     }
 }
