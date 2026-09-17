@@ -355,11 +355,19 @@ namespace TypeSelector
 
         // ── Click handlers ────────────────────────────────────────────────────────
 
+        private static object CreateInstanceOrDefault(Type type)
+        {
+            if (type == null) return null;
+            if (type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null) != null)
+                return Activator.CreateInstance(type, nonPublic: true);
+            return System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
+        }
+
         private static void SelectorButtonClicked_ForProperty(Button typeBtn, SerializedProperty property, Type declaredType, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
         {
 	        ShowTypeDropdown(typeBtn.worldBound, declaredType, chosenType =>
             {
-                property.managedReferenceValue = chosenType != null ? Activator.CreateInstance(chosenType) : null;
+                property.managedReferenceValue = CreateInstanceOrDefault(chosenType);
                 property.serializedObject.ApplyModifiedProperties();
                 typeBtn.parent?.Bind(property.serializedObject);
             }, showBaseType, renderMode);
@@ -389,7 +397,7 @@ namespace TypeSelector
 
             ShowTypeDropdown(typeBtn.worldBound, declaredType, chosenType =>
             {
-                elementProp.managedReferenceValue = chosenType != null ? Activator.CreateInstance(chosenType) : null;
+                elementProp.managedReferenceValue = CreateInstanceOrDefault(chosenType);
                 collectionProp.serializedObject.ApplyModifiedProperties();
                 typeBtn.parent?.Bind(collectionProp.serializedObject);
                 typeBtn.text = GetButtonLabel(elementProp);
