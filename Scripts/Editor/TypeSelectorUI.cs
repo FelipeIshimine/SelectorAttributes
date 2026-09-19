@@ -67,6 +67,13 @@ namespace TypeSelector
             if (SerializationUtility.HasManagedReferencesWithMissingTypes(property.serializedObject.targetObject))
                 SerializationUtility.ClearAllManagedReferencesWithMissingTypes(property.serializedObject.targetObject);
 
+            if (property.propertyType == SerializedPropertyType.ManagedReference)
+            {
+                Type fieldType = ResolveManagedReferenceFieldType(property);
+                if (fieldType != null)
+                    declaredType = fieldType;
+            }
+
             var root = new VisualElement();
 
             if (property.propertyType != SerializedPropertyType.ManagedReference)
@@ -358,6 +365,33 @@ namespace TypeSelector
         }
 
         // ── Click handlers ────────────────────────────────────────────────────────
+
+        private static Type ResolveManagedReferenceFieldType(SerializedProperty property)
+        {
+            string typename = property.managedReferenceFieldTypename;
+            if (string.IsNullOrEmpty(typename))
+                return null;
+
+            int space = typename.IndexOf(' ');
+            if (space < 0)
+                return null;
+
+            string assemblyName = typename.Substring(0, space);
+            string fullName      = typename.Substring(space + 1);
+
+            Type type = Type.GetType($"{fullName}, {assemblyName}");
+            if (type != null)
+                return type;
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(fullName);
+                if (type != null)
+                    return type;
+            }
+
+            return null;
+        }
 
         private static object CreateInstanceOrDefault(Type type)
         {
