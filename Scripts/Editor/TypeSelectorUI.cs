@@ -144,6 +144,10 @@ namespace TypeSelector
 
             activeTypeName.text = GetButtonLabel(property);
 
+            string currentDescription = SelectorDescription.Of(property.managedReferenceValue?.GetType());
+            typeSelectorBtn.tooltip = currentDescription ?? string.Empty;
+            activeTypeName.tooltip = currentDescription ?? string.Empty;
+
             if (showBaseType && property.managedReferenceValue != null)
             {
                 Type baseType = InformativeBase(property.managedReferenceValue.GetType());
@@ -469,23 +473,23 @@ namespace TypeSelector
                     candidates.Add(targetType);
             }
 
-            // Build (path, rightText, Type) triples — null entry for "none"
-            (string path, string right, Type type)[] pairs = candidates
+            // Build (path, rightText, tooltip, Type) tuples — null entry for "none"
+            (string path, string right, string tooltip, Type type)[] pairs = candidates
                                      .Select(t =>
                                      {
 	                                     var path = t.GetCustomAttributes(typeof(SelectorNameAttribute), false)
 	                                                 .OfType<SelectorNameAttribute>().FirstOrDefault()?.Name;
 	                                     string right = showBaseType ? BaseAnnotation(t) : null;
-	                                     return (path: string.IsNullOrEmpty(path) ? SelectorName.GetDisplayName(t) : path, right, type: t);
+	                                     return (path: string.IsNullOrEmpty(path) ? SelectorName.GetDisplayName(t) : path, right, tooltip: SelectorDescription.Of(t), type: t);
                                      })
-                                     .Append(("-null-", (string)null, (Type)null))
+                                     .Append(("-null-", (string)null, (string)null, (Type)null))
                                      .OrderBy(p => p.Item1, StringComparer.Ordinal)
                                      .ToArray();
 
             new AdvancedDropdownBuilder()
                 .WithTitle($"{targetType.Name} Types")
                 .WithRenderMode(renderMode)
-                .AddElements(pairs.Select(p => (p.path, p.right, p.type)), out var resolvedTypes)
+                .AddElements(pairs.Select(p => (p.path, p.right, p.tooltip, p.type)), out var resolvedTypes)
                 .SetCallback(i => onSelect?.Invoke(resolvedTypes[i]))
                 .Build()
                 .Show(worldRect);
