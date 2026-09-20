@@ -445,6 +445,13 @@ namespace TypeSelector
         // ── Dropdown ──────────────────────────────────────────────────────────────
 
         
+        private static bool IsTestAssembly(Type type)
+        {
+            var name = type.Assembly.GetName().Name;
+            return name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf(".Tests.", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private static void ShowTypeDropdown(Rect worldRect, Type targetType, Action<Type> onSelect, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
         {
             if (targetType == null) { onSelect?.Invoke(null); return; }
@@ -477,6 +484,7 @@ namespace TypeSelector
 
                             if (!constructed.IsAbstract && !constructed.IsGenericTypeDefinition &&
                                 !unityObjectType.IsAssignableFrom(constructed) &&
+                                !IsTestAssembly(candidate) &&
                                 !SelectorVisibility.IsHidden(candidate) &&
                                 !SelectorVisibility.IsHidden(constructed) &&
                                 targetType.IsAssignableFrom(constructed))
@@ -491,6 +499,7 @@ namespace TypeSelector
 
                 if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
                     !unityObjectType.IsAssignableFrom(targetType) &&
+                    !IsTestAssembly(targetType) &&
                     !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
             }
@@ -499,10 +508,12 @@ namespace TypeSelector
                 foreach (var t in TypeCache.GetTypesDerivedFrom(targetType))
                 {
                     if (!t.IsAbstract && !t.IsGenericTypeDefinition && !unityObjectType.IsAssignableFrom(t) &&
+                        !IsTestAssembly(t) &&
                         !SelectorVisibility.IsHidden(t))
                         candidates.Add(t);
                 }
                 if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
+                    !IsTestAssembly(targetType) &&
                     !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
             }
