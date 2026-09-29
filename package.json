@@ -1,6 +1,6 @@
 {
   "name": "com.felipe-ishimine.selector-attributes",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "displayName": "Selector Attributes",
   "unity": "2022.1",
   "description": "Allows the user to dynamically change the type of a given field \nin the inspector, for any other class that inherits from \nthe same base class in code.",
