@@ -121,6 +121,17 @@ public sealed class AdvancedDropdownBuilder
 	    }
 	    return this;
     }
+    public AdvancedDropdownBuilder AddElements<T>(IEnumerable<(string path, string rightText, string tooltip, T value)> elements, out T[] values)
+    {
+	    var arr = elements.ToArray();
+	    values = new T[arr.Length];
+	    for (int i = 0; i < arr.Length; i++)
+	    {
+		    values[i] = arr[i].value;
+		    _values.Add(new AdvancedDropdownPath(arr[i].path, null, arr[i].tooltip, arr[i].rightText));
+	    }
+	    return this;
+    }
     public AdvancedDropdownBuilder AddElement(string path, Texture2D icon, out int index)
     {
         index = _values.Count; _values.Add(new(path, icon)); return this;

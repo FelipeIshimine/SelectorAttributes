@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -66,6 +66,13 @@ namespace TypeSelector
         {
             if (SerializationUtility.HasManagedReferencesWithMissingTypes(property.serializedObject.targetObject))
                 SerializationUtility.ClearAllManagedReferencesWithMissingTypes(property.serializedObject.targetObject);
+
+            if (property.propertyType == SerializedPropertyType.ManagedReference)
+            {
+                Type fieldType = ResolveManagedReferenceFieldType(property);
+                if (fieldType != null)
+                    declaredType = fieldType;
+            }
 
             var root = new VisualElement();
 
@@ -143,6 +150,12 @@ namespace TypeSelector
             var activeTypeName  = container.Q<Label>("TypeName") ?? new Label();
 
             activeTypeName.text = GetButtonLabel(property);
+
+            string currentDescription = property.managedReferenceValue == null
+                ? null
+                : SelectorDescription.Of(DisplayType(property.managedReferenceValue.GetType()));
+            typeSelectorBtn.tooltip = currentDescription ?? string.Empty;
+            activeTypeName.tooltip = currentDescription ?? string.Empty;
 
             if (showBaseType && property.managedReferenceValue != null)
             {
@@ -355,6 +368,33 @@ namespace TypeSelector
 
         // ── Click handlers ────────────────────────────────────────────────────────
 
+        private static Type ResolveManagedReferenceFieldType(SerializedProperty property)
+        {
+            string typename = property.managedReferenceFieldTypename;
+            if (string.IsNullOrEmpty(typename))
+                return null;
+
+            int space = typename.IndexOf(' ');
+            if (space < 0)
+                return null;
+
+            string assemblyName = typename.Substring(0, space);
+            string fullName      = typename.Substring(space + 1);
+
+            Type type = Type.GetType($"{fullName}, {assemblyName}");
+            if (type != null)
+                return type;
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(fullName);
+                if (type != null)
+                    return type;
+            }
+
+            return null;
+        }
+
         private static object CreateInstanceOrDefault(Type type)
         {
             if (type == null) return null;
@@ -407,10 +447,15 @@ namespace TypeSelector
         // ── Dropdown ──────────────────────────────────────────────────────────────
 
         
-        private static void ShowTypeDropdown(Rect worldRect, Type targetType, Action<Type> onSelect, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
+        private static bool IsTestAssembly(Type type)
         {
-            if (targetType == null) { onSelect?.Invoke(null); return; }
+            var name = type.Assembly.GetName().Name;
+            return name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf(".Tests.", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
+        public static IReadOnlyList<Type> Candidates(Type targetType)
+        {
             if (targetType.IsArray)
                 targetType = targetType.GetElementType();
             else if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
@@ -431,20 +476,20 @@ namespace TypeSelector
                     var list = new List<Type>();
                     foreach (var candidate in TypeCache.GetTypesDerivedFrom(genericDef))
                     {
-                        try
-                        {
-                            var constructed = candidate.IsGenericTypeDefinition
-                                ? candidate.MakeGenericType(targetArgs)
-                                : candidate;
+                        if (candidate.IsGenericTypeDefinition && !AcceptsArguments(candidate, targetArgs))
+                            continue;
 
-                            if (!constructed.IsAbstract && !constructed.IsGenericTypeDefinition &&
-                                !unityObjectType.IsAssignableFrom(constructed) &&
-                                !SelectorVisibility.IsHidden(candidate) &&
-                                !SelectorVisibility.IsHidden(constructed) &&
-                                targetType.IsAssignableFrom(constructed))
-                                list.Add(constructed);
-                        }
-                        catch { /* ignore construction failures */ }
+                        var constructed = candidate.IsGenericTypeDefinition
+                            ? candidate.MakeGenericType(targetArgs)
+                            : candidate;
+
+                        if (!constructed.IsAbstract && !constructed.IsGenericTypeDefinition &&
+                            !unityObjectType.IsAssignableFrom(constructed) &&
+                            !IsTestAssembly(candidate) &&
+                            !SelectorVisibility.IsHidden(candidate) &&
+                            !SelectorVisibility.IsHidden(constructed) &&
+                            targetType.IsAssignableFrom(constructed))
+                            list.Add(constructed);
                     }
                     cached = list.ToArray();
                     GenericCandidatesCache[cacheKey] = cached;
@@ -453,6 +498,7 @@ namespace TypeSelector
 
                 if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
                     !unityObjectType.IsAssignableFrom(targetType) &&
+                    !IsTestAssembly(targetType) &&
                     !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
             }
@@ -461,31 +507,120 @@ namespace TypeSelector
                 foreach (var t in TypeCache.GetTypesDerivedFrom(targetType))
                 {
                     if (!t.IsAbstract && !t.IsGenericTypeDefinition && !unityObjectType.IsAssignableFrom(t) &&
+                        !IsTestAssembly(t) &&
                         !SelectorVisibility.IsHidden(t))
                         candidates.Add(t);
                 }
                 if (!targetType.IsAbstract && !targetType.IsGenericTypeDefinition &&
+                    !IsTestAssembly(targetType) &&
                     !SelectorVisibility.IsHidden(targetType))
                     candidates.Add(targetType);
+                if (targetType.IsInterface)
+                    candidates.AddRange(ClosingsOver(targetType));
             }
 
-            // Build (path, rightText, Type) triples — null entry for "none"
-            (string path, string right, Type type)[] pairs = candidates
+            return candidates;
+        }
+
+        public static Type DisplayType(Type type)
+        {
+            if (!type.IsConstructedGenericType || type.GetGenericArguments().Length != 1)
+                return type;
+            Type parameter = type.GetGenericTypeDefinition().GetGenericArguments()[0];
+            return parameter.GetGenericParameterConstraints().Any(c => c.IsInterface)
+                ? type.GetGenericArguments()[0]
+                : type;
+        }
+
+        private static IEnumerable<Type> ClosingsOver(Type targetInterface)
+        {
+            foreach (var open in TypeCache.GetTypesDerivedFrom(targetInterface))
+            {
+                if (!open.IsGenericTypeDefinition || open.IsAbstract || open.GetGenericArguments().Length != 1)
+                    continue;
+                if (!ImplementsDirectly(open, targetInterface) || IsTestAssembly(open) || SelectorVisibility.IsHidden(open))
+                    continue;
+
+                Type parameter = open.GetGenericArguments()[0];
+                Type kind = parameter.GetGenericParameterConstraints().FirstOrDefault(c => c.IsInterface);
+                if (kind == null)
+                    continue;
+
+                foreach (var argument in TypeCache.GetTypesDerivedFrom(kind))
+                    if (Satisfies(parameter, argument) && !IsTestAssembly(argument) && !SelectorVisibility.IsHidden(argument))
+                        yield return open.MakeGenericType(argument);
+            }
+        }
+
+        private static bool ImplementsDirectly(Type type, Type targetInterface)
+        {
+            foreach (Type implemented in type.GetInterfaces())
+                if (implemented != targetInterface && targetInterface.IsAssignableFrom(implemented))
+                    return false;
+            return true;
+        }
+
+        private static bool AcceptsArguments(Type definition, Type[] arguments)
+        {
+            Type[] parameters = definition.GetGenericArguments();
+            if (parameters.Length != arguments.Length)
+                return false;
+            for (int i = 0; i < parameters.Length; i++)
+                if (!Satisfies(parameters[i], arguments[i]))
+                    return false;
+            return true;
+        }
+
+        private static bool Satisfies(Type parameter, Type argument)
+        {
+            if (argument.ContainsGenericParameters || argument.IsInterface || argument.IsAbstract)
+                return false;
+
+            GenericParameterAttributes flags = parameter.GenericParameterAttributes;
+            if ((flags & GenericParameterAttributes.NotNullableValueTypeConstraint) != 0 &&
+                (!argument.IsValueType || Nullable.GetUnderlyingType(argument) != null))
+                return false;
+            if ((flags & GenericParameterAttributes.ReferenceTypeConstraint) != 0 && argument.IsValueType)
+                return false;
+            if ((flags & GenericParameterAttributes.DefaultConstructorConstraint) != 0 &&
+                !argument.IsValueType && argument.GetConstructor(Type.EmptyTypes) == null)
+                return false;
+
+            foreach (Type constraint in parameter.GetGenericParameterConstraints())
+                if (constraint.ContainsGenericParameters || !constraint.IsAssignableFrom(argument))
+                    return false;
+            return true;
+        }
+
+        private static void ShowTypeDropdown(Rect worldRect, Type targetType, Action<Type> onSelect, bool showBaseType = false, DropdownRenderMode renderMode = DropdownRenderMode.SearchDrilldown)
+        {
+            if (targetType == null) { onSelect?.Invoke(null); return; }
+
+            if (targetType.IsArray)
+                targetType = targetType.GetElementType();
+            else if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
+                targetType = targetType.GetGenericArguments()[0];
+
+            IReadOnlyList<Type> candidates = Candidates(targetType);
+
+            // Build (path, rightText, tooltip, Type) tuples — null entry for "none"
+            (string path, string right, string tooltip, Type type)[] pairs = candidates
                                      .Select(t =>
                                      {
-	                                     var path = t.GetCustomAttributes(typeof(SelectorNameAttribute), false)
+	                                     Type named = DisplayType(t);
+	                                     var path = named.GetCustomAttributes(typeof(SelectorNameAttribute), false)
 	                                                 .OfType<SelectorNameAttribute>().FirstOrDefault()?.Name;
 	                                     string right = showBaseType ? BaseAnnotation(t) : null;
-	                                     return (path: string.IsNullOrEmpty(path) ? SelectorName.GetDisplayName(t) : path, right, type: t);
+	                                     return (path: string.IsNullOrEmpty(path) ? SelectorName.GetDisplayName(named) : path, right, tooltip: SelectorDescription.Of(named), type: t);
                                      })
-                                     .Append(("-null-", (string)null, (Type)null))
+                                     .Append(("-null-", (string)null, (string)null, (Type)null))
                                      .OrderBy(p => p.Item1, StringComparer.Ordinal)
                                      .ToArray();
 
             new AdvancedDropdownBuilder()
                 .WithTitle($"{targetType.Name} Types")
                 .WithRenderMode(renderMode)
-                .AddElements(pairs.Select(p => (p.path, p.right, p.type)), out var resolvedTypes)
+                .AddElements(pairs.Select(p => (p.path, p.right, p.tooltip, p.type)), out var resolvedTypes)
                 .SetCallback(i => onSelect?.Invoke(resolvedTypes[i]))
                 .Build()
                 .Show(worldRect);
@@ -580,7 +715,7 @@ namespace TypeSelector
         private static string GetButtonLabel(SerializedProperty p)
         {
             var val = p.managedReferenceValue;
-            return val != null ? SelectorName.GetDisplayName(val.GetType()) : "-null-";
+            return val != null ? SelectorName.GetDisplayName(DisplayType(val.GetType())) : "-null-";
         }
 
         private static string BaseAnnotation(Type type)
