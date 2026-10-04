@@ -303,6 +303,12 @@ internal sealed class DropdownWindow : EditorWindow
 
     private void CreateGUI()
     {
+        if (_current == null)
+        {
+            Close();
+            return;
+        }
+
         var root = rootVisualElement;
         DropdownTheme.ApplyPanel(root);
 

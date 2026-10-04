@@ -33,9 +33,17 @@ public static class SelectorVisibility
 	/// either because it carries <see cref="HideInSelectorAttribute"/> directly, or because an
 	/// ancestor declared <c>HideDerived = true</c>.
 	/// </summary>
+	private static readonly System.Collections.Generic.List<Func<Type, bool>> Rules = new();
+
+	public static void AddRule(Func<Type, bool> hides) => Rules.Add(hides ?? throw new ArgumentNullException(nameof(hides)));
+
 	public static bool IsHidden(Type type)
 	{
 		if (type == null) return false;
+
+		foreach (var hides in Rules)
+			if (hides(type))
+				return true;
 
 		// Explicit attribute on the type itself (inherit:false so each level is checked deliberately).
 		if (Attribute.IsDefined(type, typeof(HideInSelectorAttribute), inherit: false))
