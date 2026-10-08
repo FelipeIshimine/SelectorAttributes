@@ -91,6 +91,10 @@
     background-color: #474747;
 }
 
+.dropdown-row--hover {
+    background-color: #474747;
+}
+
 .dropdown-row--selected {
     background-color: #474747;
 }

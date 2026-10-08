@@ -229,6 +229,14 @@ internal sealed class MillerColumnsWindow : EditorWindow
             if (e.button == 0) OnItemClicked(r.Node, r.Column);
         });
 
+        row.RegisterCallback<PointerEnterEvent>(_ =>
+        {
+            row.AddToClassList("dropdown-row--hover");
+            if (row.userData is RowRef r && r.Node != null)
+                OpenOnHover(r.Node, r.Column);
+        });
+        row.RegisterCallback<PointerLeaveEvent>(_ => row.RemoveFromClassList("dropdown-row--hover"));
+
         row.Add(iconImg);
         row.Add(label);
         row.Add(baseLabel);
@@ -283,6 +291,40 @@ internal sealed class MillerColumnsWindow : EditorWindow
         }
 
         Drill(column, node);
+    }
+
+    private void OpenOnHover(DropdownNode node, int column)
+    {
+        if (column < 0 || column >= _columnLists.Count) return;
+
+        if (node.IsFolder)
+        {
+            if (column < _pathFolders.Count && _pathFolders[column] == node) return;
+            TrimColumnsAfter(column);
+            _pathFolders.Add(node);
+            AddColumn(node, column + 1);
+            var opened = _columnLists[column + 1];
+            _columnsHost.schedule.Execute(() => _columnsHost.ScrollTo(opened)).StartingIn(0);
+        }
+        else
+        {
+            if (_pathFolders.Count <= column) return;
+            TrimColumnsAfter(column);
+        }
+
+        RefreshListSafe(_columnLists[column]);
+    }
+
+    private void TrimColumnsAfter(int column)
+    {
+        if (_pathFolders.Count > column)
+            _pathFolders.RemoveRange(column, _pathFolders.Count - column);
+        while (_columnLists.Count > column + 1)
+        {
+            _columnLists.RemoveAt(_columnLists.Count - 1);
+            _columnsHost.RemoveAt(_columnsHost.childCount - 1);
+        }
+        _focusedColumn = Mathf.Min(_focusedColumn, _columnLists.Count - 1);
     }
 
     private void Drill(int column, DropdownNode folder)
