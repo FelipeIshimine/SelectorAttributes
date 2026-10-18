@@ -254,34 +254,25 @@ public class ComponentSelectorDrawer : PropertyDrawer
 	// Try to resolve the element type (handles arrays and List<T>)
 	static Type ResolveRequiredType(SerializedProperty property)
 	{
-		try
+		var fi = property.serializedObject.targetObject.GetType().GetField(property.propertyPath.Split('[', '.')[0],
+			System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic |
+			System.Reflection.BindingFlags.Public);
+
+		// Fallback to the drawer's FieldInfo if available (when called from PropertyDrawer fieldInfo)
+		// But because this static helper doesn't have fieldInfo, we use reflection on targetObject above.
+		if (fi != null)
 		{
-			var fi = property.serializedObject.targetObject.GetType().GetField(property.propertyPath.Split('[', '.')[0],
-				System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic |
-				System.Reflection.BindingFlags.Public);
-
-			// Fallback to the drawer's FieldInfo if available (when called from PropertyDrawer fieldInfo)
-			// But because this static helper doesn't have fieldInfo, we use reflection on targetObject above.
-			if (fi != null)
-			{
-				var fType = fi.FieldType;
-				if (fType.IsArray) return fType.GetElementType();
-				if (fType.IsGenericType && fType.GetGenericTypeDefinition() == typeof(List<>))
-					return fType.GetGenericArguments()[0];
-				return fType;
-			}
-
-			// Last resort: attempt to use the current assigned object's type
-			if (property.objectReferenceValue != null)
-				return property.objectReferenceValue.GetType();
-
-			return null;
+			var fType = fi.FieldType;
+			if (fType.IsArray) return fType.GetElementType();
+			if (fType.IsGenericType && fType.GetGenericTypeDefinition() == typeof(List<>))
+				return fType.GetGenericArguments()[0];
+			return fType;
 		}
-		catch
-		{
-			if (property.objectReferenceValue != null)
-				return property.objectReferenceValue.GetType();
-			return null;
-		}
+
+		// Last resort: attempt to use the current assigned object's type
+		if (property.objectReferenceValue != null)
+			return property.objectReferenceValue.GetType();
+
+		return null;
 	}
 }
