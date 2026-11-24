@@ -58,9 +58,7 @@ public static class SubAssetSelectorUI
         };
         button.clicked += () =>
         {
-	        property.serializedObject.Update();
-	        property.objectReferenceValue = null;
-	        property.serializedObject.ApplyModifiedProperties();
+	        SelectorAssignment.AssignToEveryTarget(property.serializedObject, property.propertyPath, null);
         };
       
         return button;
@@ -138,11 +136,7 @@ public static class SubAssetSelectorUI
                 listMode,
                 selectedAsset =>
                 {
-                    serializedObject.Update();
-                    var targetProperty = serializedObject.FindProperty(propertyPath);
-                    if (targetProperty == null) return;
-                    targetProperty.objectReferenceValue = selectedAsset;
-                    serializedObject.ApplyModifiedProperties();
+                    SelectorAssignment.AssignToEveryTarget(serializedObject, propertyPath, selectedAsset);
                 },
                 defaultType
             );

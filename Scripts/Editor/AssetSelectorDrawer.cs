@@ -80,12 +80,12 @@ public class AssetSelectorDrawer : PropertyDrawer
 
         // Capture path, not the property itself, to survive drawer pooling.
         var propertyPath           = property.propertyPath;
-        var serializedObjectTarget = property.serializedObject.targetObject;
+        var serializedObjectTargets = property.serializedObject.targetObjects;
 
         dropButton.clicked += () =>
         {
             // Re-resolve the property at click time — safe against pooling.
-            var so   = new SerializedObject(serializedObjectTarget);
+            var so   = new SerializedObject(serializedObjectTargets);
             var prop = so.FindProperty(propertyPath);
             if (prop != null)
                 ShowDropdown(prop, dropButton, fieldType, group, renderMode, folders);
@@ -137,7 +137,7 @@ public class AssetSelectorDrawer : PropertyDrawer
             if (cacheIndex < entry.Assets.Count)
             {
                 // Existing asset selected.
-                property.objectReferenceValue = entry.Assets[cacheIndex].Asset;
+                SelectorAssignment.AssignToEveryTarget(property.serializedObject, property.propertyPath, entry.Assets[cacheIndex].Asset);
             }
             else
             {
@@ -152,14 +152,12 @@ public class AssetSelectorDrawer : PropertyDrawer
 
                 var instance = ScriptableObject.CreateInstance(type);
                 AssetDatabase.CreateAsset(instance, path);
-                property.objectReferenceValue = instance;
+                SelectorAssignment.AssignToEveryTarget(property.serializedObject, property.propertyPath, instance);
 
                 // Invalidate so the new asset appears next time.
                 s_cache.Remove(key);
             }
 
-            EditorUtility.SetDirty(property.serializedObject.targetObject);
-            property.serializedObject.ApplyModifiedProperties();
         }
     }
 

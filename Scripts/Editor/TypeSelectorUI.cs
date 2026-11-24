@@ -178,8 +178,7 @@ namespace TypeSelector
             typeSelectorBtn.clicked += () => SelectorButtonClicked_ForProperty(typeSelectorBtn, property,declaredType,showBaseType,renderMode);
             AddContextMenu(typeSelectorBtn, () => property.managedReferenceValue?.GetType(), declaredType, () =>
             {
-                property.managedReferenceValue = null;
-                property.serializedObject.ApplyModifiedProperties();
+                AssignToEveryTarget(property, null);
                 typeSelectorBtn.parent?.Bind(property.serializedObject);
             });
             typeSelectorBtn.RemoveFromHierarchy();
@@ -323,8 +322,7 @@ namespace TypeSelector
                 typeBtn.clicked += () => SelectorButtonClicked_ForElement(typeBtn, elementProp, collectionProperty, fieldInfo);
                 AddContextMenu(typeBtn, () => elementProp.managedReferenceValue?.GetType(), GetElementTargetType(fieldInfo), () =>
                 {
-                    elementProp.managedReferenceValue = null;
-                    collectionProperty.serializedObject.ApplyModifiedProperties();
+                    AssignToEveryTarget(elementProp, null);
                     typeBtn.parent?.Bind(collectionProperty.serializedObject);
                     typeBtn.text = GetButtonLabel(elementProp);
                 });
@@ -395,6 +393,22 @@ namespace TypeSelector
             return null;
         }
 
+        private static void AssignToEveryTarget(SerializedProperty property, Type chosenType)
+        {
+            var shared = property.serializedObject;
+            shared.ApplyModifiedProperties();
+            foreach (var target in shared.targetObjects)
+            {
+                using var single = new SerializedObject(target);
+                var targetProperty = single.FindProperty(property.propertyPath);
+                if (targetProperty == null)
+                    throw new InvalidOperationException($"[TypeSelector] '{target.name}' has no property '{property.propertyPath}'.");
+                targetProperty.managedReferenceValue = CreateInstanceOrDefault(chosenType);
+                single.ApplyModifiedProperties();
+            }
+            shared.Update();
+        }
+
         private static object CreateInstanceOrDefault(Type type)
         {
             if (type == null) return null;
@@ -407,8 +421,7 @@ namespace TypeSelector
         {
 	        ShowTypeDropdown(typeBtn.worldBound, declaredType, chosenType =>
             {
-                property.managedReferenceValue = CreateInstanceOrDefault(chosenType);
-                property.serializedObject.ApplyModifiedProperties();
+                AssignToEveryTarget(property, chosenType);
                 typeBtn.parent?.Bind(property.serializedObject);
             }, showBaseType, renderMode);
         }
@@ -437,8 +450,7 @@ namespace TypeSelector
 
             ShowTypeDropdown(typeBtn.worldBound, declaredType, chosenType =>
             {
-                elementProp.managedReferenceValue = CreateInstanceOrDefault(chosenType);
-                collectionProp.serializedObject.ApplyModifiedProperties();
+                AssignToEveryTarget(elementProp, chosenType);
                 typeBtn.parent?.Bind(collectionProp.serializedObject);
                 typeBtn.text = GetButtonLabel(elementProp);
             }, showBaseType);
